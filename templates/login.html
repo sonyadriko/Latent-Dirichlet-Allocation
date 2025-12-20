@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Login ke aplikasi LDA News Trend Analysis">
+    <title>Login - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="logo">📊</div>
+                <h2>Selamat Datang</h2>
+                <p class="text-secondary">Masuk ke akun Anda</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <form id="login-form">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input type="email" id="email" name="email" class="form-input" placeholder="contoh@email.com"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                        placeholder="Masukkan password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full" id="submit-btn">
+                    <span id="btn-text">Login</span>
+                    <div class="spinner hidden" id="btn-spinner"></div>
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Belum punya akun? <a href="/register">Daftar di sini</a></p>
+                <p style="margin-top: var(--space-4);"><a href="/">← Kembali ke Home</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const btn = document.getElementById('submit-btn');
+            const btnText = document.getElementById('btn-text');
+            const spinner = document.getElementById('btn-spinner');
+            const alertContainer = document.getElementById('alert-container');
+
+            // Show loading
+            btn.disabled = true;
+            btnText.textContent = 'Loading...';
+            spinner.classList.remove('hidden');
+            alertContainer.innerHTML = '';
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Save token and user info
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            ✓ ${data.message}. Mengalihkan...
+                        </div>
+                    `;
+
+                    setTimeout(() => {
+                        window.location.href = '/admin';
+                    }, 1000);
+                } else {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-error">
+                            ✕ ${data.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        ✕ Terjadi kesalahan. Silakan coba lagi.
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Login';
+                spinner.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+
+</html>

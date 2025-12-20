@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Admin Dashboard - Kelola proses KDD untuk analisis berita">
+    <title>Admin Dashboard - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .crawling-form {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-8);
+            margin-bottom: var(--space-8);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-6);
+            margin-bottom: var(--space-6);
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .file-upload {
+            position: relative;
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+        }
+
+        .file-upload:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .file-upload input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-upload .icon {
+            font-size: 2.5rem;
+            margin-bottom: var(--space-2);
+        }
+
+        .file-upload .filename {
+            color: var(--success);
+            font-weight: 600;
+            margin-top: var(--space-2);
+        }
+
+        .btn-crawl {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            font-size: 1.125rem;
+            padding: var(--space-4) var(--space-8);
+        }
+
+        .btn-crawl:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(245, 158, 11, 0.3);
+        }
+
+        .progress-container {
+            margin-top: var(--space-6);
+        }
+
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        .progress-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            position: relative;
+        }
+
+        .progress-step::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: var(--border-color);
+            z-index: 0;
+        }
+
+        .progress-step:last-child::before {
+            display: none;
+        }
+
+        .progress-step .step-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            transition: all var(--transition-normal);
+        }
+
+        .progress-step.active .step-icon {
+            background: var(--warning);
+            border-color: var(--warning);
+            animation: pulse 1.5s infinite;
+        }
+
+        .progress-step.completed .step-icon {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .progress-step .step-label {
+            margin-top: var(--space-2);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .log-output {
+            background: var(--bg-darker);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-top: var(--space-4);
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.875rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-line {
+            margin-bottom: var(--space-2);
+            padding: var(--space-2);
+            border-radius: var(--radius-sm);
+        }
+
+        .log-line.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .log-line.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .log-line.info {
+            color: var(--text-secondary);
+        }
+
+        .log-line.processing {
+            color: var(--warning);
+        }
+
+        .result-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+            margin-top: var(--space-6);
+        }
+
+        .result-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            text-align: center;
+        }
+
+        .result-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-light);
+        }
+
+        .result-card .label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .similar-docs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: var(--space-4);
+            margin-top: var(--space-4);
+        }
+
+        .similar-doc-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            transition: all var(--transition-normal);
+            position: relative;
+        }
+
+        .similar-doc-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-color: var(--primary);
+        }
+
+        .similarity-score {
+            position: absolute;
+            top: var(--space-2);
+            right: var(--space-2);
+            background: var(--primary);
+            color: white;
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .doc-category {
+            display: inline-block;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--primary);
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-bottom: var(--space-2);
+        }
+
+        .result-section h3 {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .matched-document-card {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 197, 94, 0.1));
+            border: 2px solid var(--success);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--text-muted), var(--text-secondary));
+            color: white;
+            font-size: 1.125rem;
+            padding: var(--space-4) var(--space-8);
+            margin-left: var(--space-4);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .form-checkbox {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .form-checkbox input[type="checkbox"] {
+            margin-right: var(--space-2);
+        }
+
+        .online-results-section {
+            margin-top: var(--space-6);
+        }
+
+        .online-doc-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1));
+            border: 1px solid var(--primary);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-bottom: var(--space-3);
+            transition: all var(--transition-normal);
+        }
+
+        .online-doc-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .source-badge {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: var(--space-2);
+        }
+
+        .online-doc-title {
+            color: var(--primary);
+            font-weight: 600;
+            margin-bottom: var(--space-2);
+        }
+
+        .online-doc-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+
+        .online-doc-link:hover {
+            color: var(--primary);
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-4);
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-3);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="icon">📊</div>
+                <span class="text-gradient">LDA News</span>
+            </div>
+
+            <ul class="sidebar-menu">
+                <li><a href="/admin" class="active">🏠 Dashboard</a></li>
+                <li><a href="/visualization">📈 Visualisasi</a></li>
+                <li><a href="/">🌐 Homepage</a></li>
+                <li><a href="#" id="logout-btn">🚪 Logout</a></li>
+            </ul>
+
+            <div style="margin-top: auto; padding-top: var(--space-8);">
+                <div class="card" style="padding: var(--space-4);">
+                    <p class="text-muted" style="font-size: 0.8rem;">Logged in as:</p>
+                    <p id="user-name" style="font-weight: 600;">-</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">Document Search & LDA Analysis</h1>
+                <p class="page-subtitle">Search documents and find similar content using LDA topic modeling</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <!-- Document Search Section -->
+            <div class="crawling-form">
+                <h2 style="text-align: center; margin-bottom: var(--space-6); color: var(--primary);">
+                    🔍 Document Search
+                </h2>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label class="form-label" for="search-input">Search by Title</label>
+                        <input type="text" id="search-input" class="form-input" 
+                               placeholder="Ketik judul novel atau dokumen..." 
+                               style="padding-right: 120px;">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label" for="num-topics">Topics</label>
+                        <input type="number" id="num-topics" class="form-input" value="5" min="2" max="20">
+                    </div>
+                </div>
+
+                <div class="form-row" style="margin-bottom: var(--space-4);">
+                    <div class="form-group">
+                        <label class="form-checkbox">
+                            <input type="checkbox" id="include-online" checked>
+                            <span class="checkmark"></span>
+                            Include online search (Google Books, Wikipedia)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <button type="button" class="btn btn-crawl" id="btn-search" onclick="searchDocuments()">
+                        🔍 Search Documents
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btn-add-online" onclick="addOnlineDocuments()">
+                        🌐 Add Online Results
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btn-train" onclick="trainLDA()">
+                        🧠 Train LDA Model
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Results -->
+            <div id="search-results" class="hidden">
+                <div class="result-section" style="margin-top: var(--space-8);">
+                    <h3 style="color: var(--success); margin-bottom: var(--space-4);">
+                        📖 Document Found
+                    </h3>
+                    <div id="matched-document" class="card"></div>
+                </div>
+
+                <div class="result-section" style="margin-top: var(--space-6);">
+                    <h3 style="color: var(--primary); margin-bottom: var(--space-4);">
+                        🔗 Similar Documents in Same Topic Cluster
+                    </h3>
+                    <div id="similar-documents" class="similar-docs-grid"></div>
+                </div>
+            </div>
+
+            <!-- Online Results Section -->
+            <div id="online-results" class="online-results-section hidden">
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-value" id="online-found">0</div>
+                        <div class="stat-label">Online Documents Found</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="online-local-matches">0</div>
+                        <div class="stat-label">Already in Collection</div>
+                    </div>
+                </div>
+
+                <div class="result-section" style="margin-top: var(--space-4);">
+                    <h3 style="color: var(--primary); margin-bottom: var(--space-4);">
+                        🌐 Online Search Results
+                    </h3>
+                    <div id="online-documents"></div>
+                </div>
+            </div>
+
+                <!-- Progress Indicator -->
+                <div class="progress-container hidden" id="progress-container">
+                    <div class="progress-steps">
+                        <div class="progress-step" id="step-crawling">
+                            <div class="step-icon">1</div>
+                            <span class="step-label">Crawling</span>
+                        </div>
+                        <div class="progress-step" id="step-preprocessing">
+                            <div class="step-icon">2</div>
+                            <span class="step-label">Preprocessing</span>
+                        </div>
+                        <div class="progress-step" id="step-transforming">
+                            <div class="step-icon">3</div>
+                            <span class="step-label">Transforming</span>
+                        </div>
+                        <div class="progress-step" id="step-datamining">
+                            <div class="step-icon">4</div>
+                            <span class="step-label">LDA</span>
+                        </div>
+                        <div class="progress-step" id="step-done">
+                            <div class="step-icon">✓</div>
+                            <span class="step-label">Selesai</span>
+                        </div>
+                    </div>
+
+                    <div class="log-output" id="log-output">
+                        <div class="log-line info">Memulai proses...</div>
+                    </div>
+                </div>
+
+                <!-- Result Summary -->
+                <div class="result-summary hidden" id="result-summary">
+                    <div class="result-card">
+                        <div class="value" id="result-crawled">0</div>
+                        <div class="label">Berita di-Crawl</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="value" id="result-topics">0</div>
+                        <div class="label">Topik Ditemukan</div>
+                    </div>
+                    <div class="result-card">
+                        <div class="value" id="result-coherence">0</div>
+                        <div class="label">Coherence Score</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex gap-4 mt-6">
+                <button class="btn btn-secondary" onclick="resetPipeline()">
+                    🔄 Reset Pipeline
+                </button>
+                <a href="/visualization" class="btn btn-success" id="btn-viz">
+                    📈 Lihat Hasil Visualisasi
+                </a>
+            </div>
+
+            <!-- Instructions -->
+            <div class="card mt-6">
+                <h3 class="card-title">📖 Cara Penggunaan</h3>
+                <ol style="padding-left: var(--space-6); color: var(--text-secondary);">
+                    <li style="margin-bottom: var(--space-2);">Masukkan <strong>nama project</strong> untuk identifikasi
+                        analisis Anda.</li>
+                    <li style="margin-bottom: var(--space-2);">Siapkan file <strong>.txt</strong> berisi daftar URL
+                        berita (satu URL per baris).</li>
+                    <li style="margin-bottom: var(--space-2);">Upload file melalui tombol <strong>"Upload
+                            Link"</strong>.</li>
+                    <li style="margin-bottom: var(--space-2);">Tentukan <strong>jumlah topik</strong> yang diinginkan
+                        (default: 5).</li>
+                    <li style="margin-bottom: var(--space-2);">Klik tombol <strong>"Crawling"</strong> untuk memulai
+                        proses.</li>
+                    <li style="margin-bottom: var(--space-2);">Tunggu hingga seluruh proses KDD selesai secara otomatis.
+                    </li>
+                    <li>Lihat hasil visualisasi di halaman <strong>Visualisasi</strong>.</li>
+                </ol>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // Check authentication
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!checkAuth()) {
+                window.location.href = '/login';
+                return;
+            }
+        });
+        
+        // File upload handling
+        const fileInput = document.getElementById('file-input');
+        const filenameDisplay = document.getElementById('selected-filename');
+        const fileUploadArea = document.getElementById('file-upload-area');
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                filenameDisplay.textContent = `✓ ${file.name}`;
+                filenameDisplay.classList.remove('hidden');
+                fileUploadArea.style.borderColor = 'var(--success)';
+            }
+        });
+        
+        // Drag and drop
+        fileUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUploadArea.style.borderColor = 'var(--primary)';
+            fileUploadArea.style.background = 'rgba(99, 102, 241, 0.1)';
+        });
+        
+        fileUploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            fileUploadArea.style.borderColor = 'var(--border-color)';
+            fileUploadArea.style.background = 'transparent';
+        });
+        
+        // Search documents function
+        async function searchDocuments() {
+            const searchInput = document.getElementById('search-input').value.trim();
+            const includeOnline = document.getElementById('include-online').checked;
+            const btnSearch = document.getElementById('btn-search');
+            const searchResults = document.getElementById('search-results');
+            const onlineResults = document.getElementById('online-results');
+            const alertContainer = document.getElementById('alert-container');
+            
+            if (!searchInput) {
+                alert('Please enter a search term');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                btnSearch.disabled = true;
+                btnSearch.innerHTML = '<div class="spinner"></div> Searching...';
+                searchResults.classList.add('hidden');
+                onlineResults.classList.add('hidden');
+                alertContainer.innerHTML = '';
+                
+                // Send search request
+                const response = await apiRequest(`/api/search/documents?query=${encodeURIComponent(searchInput)}&online=${includeOnline}`);
+                
+                if (response.success) {
+                    displaySearchResults(response.data);
+                    if (includeOnline) {
+                        displayOnlineResults(response.data);
+                    }
+                } else {
+                    throw new Error(response.message);
+                }
+                
+            } catch (error) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        ✕ ${error.message}
+                    </div>
+                `;
+            } finally {
+                btnSearch.disabled = false;
+                btnSearch.innerHTML = '🔍 Search Documents';
+            }
+        }
+        
+        // Add online documents function
+        async function addOnlineDocuments() {
+            const searchInput = document.getElementById('search-input').value.trim();
+            const btnAddOnline = document.getElementById('btn-add-online');
+            const alertContainer = document.getElementById('alert-container');
+            
+            if (!searchInput) {
+                alert('Please enter a search term first');
+                return;
+            }
+            
+            if (!confirm('This will search online and add documents to your local collection. Continue?')) {
+                return;
+            }
+            
+            try {
+                // Show loading state
+                btnAddOnline.disabled = true;
+                btnAddOnline.innerHTML = '<div class="spinner"></div> Adding...';
+                alertContainer.innerHTML = '';
+                
+                // Send request to add online documents
+                const response = await apiRequest('/api/search/add-online', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        query: searchInput,
+                        max_results: 10
+                    })
+                });
+                
+                if (response.success) {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            ✓ ${response.message}<br>
+                            Found ${response.data.online_found} online, added ${response.data.added_count} new documents.
+                        </div>
+                    `;
+                } else {
+                    throw new Error(response.message);
+                }
+                
+            } catch (error) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        ✕ ${error.message}
+                    </div>
+                `;
+            } finally {
+                btnAddOnline.disabled = false;
+                btnAddOnline.innerHTML = '🌐 Add Online Results';
+            }
+        }
+        
+        // Train LDA model function
+        async function trainLDA() {
+            const numTopics = document.getElementById('num-topics').value;
+            const btnTrain = document.getElementById('btn-train');
+            const alertContainer = document.getElementById('alert-container');
+            
+            try {
+                // Show loading state
+                btnTrain.disabled = true;
+                btnTrain.innerHTML = '<div class="spinner"></div> Training...';
+                alertContainer.innerHTML = '';
+                
+                // Send train request
+                const response = await apiRequest('/api/search/train', {
+                    method: 'POST',
+                    body: JSON.stringify({ num_topics: parseInt(numTopics) })
+                });
+                
+                if (response.success) {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            ✓ LDA Model trained successfully!<br>
+                            Documents: ${response.data.num_documents}<br>
+                            Topics: ${response.data.num_topics}<br>
+                            Coherence Score: ${response.data.coherence_score}
+                        </div>
+                    `;
+                } else {
+                    throw new Error(response.message);
+                }
+                
+            } catch (error) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        ✕ ${error.message}
+                    </div>
+                `;
+            } finally {
+                btnTrain.disabled = false;
+                btnTrain.innerHTML = '🧠 Train LDA Model';
+            }
+        }
+        
+        // Display search results
+        function displaySearchResults(data) {
+            const searchResults = document.getElementById('search-results');
+            const matchedDocument = document.getElementById('matched-document');
+            const similarDocuments = document.getElementById('similar-documents');
+            
+            // Display matched document
+            if (data.best_match) {
+                const doc = data.best_match;
+                matchedDocument.innerHTML = `
+                    <div class="card matched-document-card">
+                        <div class="doc-category">${doc.category || 'Unknown'}</div>
+                        <h3 style="color: var(--success); margin-bottom: var(--space-2);">${doc.title}</h3>
+                        <p style="color: var(--text-muted); margin-bottom: var(--space-2);"><strong>Author:</strong> ${doc.author || 'Unknown'}</p>
+                        <p style="color: var(--text-secondary); line-height: 1.6;">${doc.content.substring(0, 300)}...</p>
+                    </div>
+                `;
+            }
+            
+            // Display similar documents
+            if (data.similar_documents && data.similar_documents.length > 0) {
+                similarDocuments.innerHTML = data.similar_documents.map(item => {
+                    const doc = item.document;
+                    return `
+                        <div class="similar-doc-card">
+                            <span class="similarity-score">${item.similarity_score}</span>
+                            <div class="doc-category">${doc.category || 'Unknown'}</div>
+                            <h4 style="margin: var(--space-2) 0; color: var(--primary);">${doc.title}</h4>
+                            <p style="color: var(--text-muted); margin-bottom: var(--space-2); font-size: 0.875rem;">
+                                <strong>Author:</strong> ${doc.author || 'Unknown'} | 
+                                <strong>Topic:</strong> ${item.dominant_topic ? `Topic ${item.dominant_topic.topic_id + 1}` : 'N/A'}
+                            </p>
+                            <p style="color: var(--text-secondary); line-height: 1.5; font-size: 0.875rem;">
+                                ${doc.content.substring(0, 200)}...
+                            </p>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                similarDocuments.innerHTML = '<p style="color: var(--text-muted);">No similar documents found in the same topic cluster.</p>';
+            }
+            
+            searchResults.classList.remove('hidden');
+        }
+        
+        // Add enter key support for search
+        document.getElementById('search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchDocuments();
+            }
+        });
+        
+        // Display online results function
+        function displayOnlineResults(data) {
+            const onlineResults = document.getElementById('online-results');
+            const onlineDocuments = document.getElementById('online-documents');
+            const onlineFound = document.getElementById('online-found');
+            const onlineLocalMatches = document.getElementById('online-local-matches');
+            
+            if (!data.online_documents || data.online_documents.length === 0) {
+                onlineResults.classList.add('hidden');
+                return;
+            }
+            
+            // Update stats
+            onlineFound.textContent = data.online_count || 0;
+            onlineLocalMatches.textContent = (data.online_local_matches || []).length;
+            
+            // Display online documents
+            onlineDocuments.innerHTML = data.online_documents.map(doc => {
+                const sourceName = doc.source.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const isAlreadyLocal = data.online_local_matches && 
+                    data.online_local_matches.some(local => local.title === doc.title);
+                
+                return `
+                    <div class="online-doc-card">
+                        <span class="source-badge">${sourceName}</span>
+                        ${isAlreadyLocal ? '<span class="source-badge" style="background: var(--success);">In Collection</span>' : ''}
+                        <h4 class="online-doc-title">${doc.title}</h4>
+                        <p style="color: var(--text-muted); margin-bottom: var(--space-2); font-size: 0.875rem;">
+                            ${doc.author ? `<strong>Author:</strong> ${doc.author}` : ''}
+                            ${doc.category ? ` | <strong>Category:</strong> ${doc.category}` : ''}
+                            ${doc.published_date ? ` | <strong>Published:</strong> ${doc.published_date}` : ''}
+                        </p>
+                        <p style="color: var(--text-secondary); line-height: 1.5; font-size: 0.875rem; margin-bottom: var(--space-2);">
+                            ${doc.content ? doc.content.substring(0, 200) + '...' : 'No description available'}
+                        </p>
+                        ${doc.info_link ? `<a href="${doc.info_link}" target="_blank" class="online-doc-link">📖 View More →</a>` : ''}
+                    </div>
+                `;
+            }).join('');
+            
+            onlineResults.classList.remove('hidden');
+        }
+        
+        // Reset pipeline
+        async function resetPipeline() {
+            if (!confirm('Apakah Anda yakin ingin mereset seluruh pipeline?')) {
+                return;
+            }
+            
+            try {
+                const response = await apiRequest('/api/kdd/reset', {
+                    method: 'POST'
+                });
+                
+                if (response.success) {
+                    alert('Pipeline berhasil direset');
+                    location.reload();
+                }
+            } catch (error) {
+                alert('Gagal mereset pipeline: ' + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

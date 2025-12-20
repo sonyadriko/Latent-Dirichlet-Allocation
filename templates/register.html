@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Daftar akun baru di LDA News Trend Analysis">
+    <title>Register - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="logo">📊</div>
+                <h2>Buat Akun Baru</h2>
+                <p class="text-secondary">Daftar untuk mulai menganalisis</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <form id="register-form">
+                <div class="form-group">
+                    <label class="form-label" for="name">Nama Lengkap</label>
+                    <input type="text" id="name" name="name" class="form-input" placeholder="Masukkan nama lengkap"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input type="email" id="email" name="email" class="form-input" placeholder="contoh@email.com"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                        placeholder="Minimal 6 karakter" minlength="6" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="confirm-password">Konfirmasi Password</label>
+                    <input type="password" id="confirm-password" name="confirm-password" class="form-input"
+                        placeholder="Ulangi password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full" id="submit-btn">
+                    <span id="btn-text">Daftar</span>
+                    <div class="spinner hidden" id="btn-spinner"></div>
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Sudah punya akun? <a href="/login">Login di sini</a></p>
+                <p style="margin-top: var(--space-4);"><a href="/">← Kembali ke Home</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const btn = document.getElementById('submit-btn');
+            const btnText = document.getElementById('btn-text');
+            const spinner = document.getElementById('btn-spinner');
+            const alertContainer = document.getElementById('alert-container');
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+
+            // Validate passwords match
+            if (password !== confirmPassword) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        ✕ Password dan konfirmasi password tidak cocok
+                    </div>
+                `;
+                return;
+            }
+
+            // Show loading
+            btn.disabled = true;
+            btnText.textContent = 'Loading...';
+            spinner.classList.remove('hidden');
+            alertContainer.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, email, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            ✓ ${data.message}. Mengalihkan ke halaman login...
+                        </div>
+                    `;
+
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-error">
+                            ✕ ${data.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-error">
+                        ✕ Terjadi kesalahan. Silakan coba lagi.
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Daftar';
+                spinner.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+
+</html>

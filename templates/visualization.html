@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Visualisasi hasil pemodelan topik LDA">
+    <title>Visualisasi - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="dashboard">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="icon">📊</div>
+                <span class="text-gradient">LDA News</span>
+            </div>
+
+            <ul class="sidebar-menu">
+                <li><a href="/admin">🏠 Dashboard</a></li>
+                <li><a href="/visualization" class="active">📈 Visualisasi</a></li>
+                <li><a href="/">🌐 Homepage</a></li>
+                <li><a href="#" id="logout-btn">🚪 Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">Document Search & Topic Visualization</h1>
+                <p class="page-subtitle">Visualize topics and search similar documents</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="card text-center" style="padding: var(--space-10);">
+                <div class="spinner" style="margin: 0 auto var(--space-4);"></div>
+                <p class="text-secondary">Memuat hasil visualisasi...</p>
+            </div>
+
+            <!-- No Data State -->
+            <div id="no-data-state" class="card text-center hidden" style="padding: var(--space-10);">
+                <div style="font-size: 4rem; margin-bottom: var(--space-4);">📭</div>
+                <h3>Belum Ada Hasil</h3>
+                <p class="text-secondary mb-6">
+                    Silakan jalankan proses KDD terlebih dahulu untuk melihat visualisasi.
+                </p>
+                <a href="/admin" class="btn btn-primary">
+                    🚀 Ke Dashboard Admin
+                </a>
+            </div>
+
+            <!-- Visualization Content -->
+            <div id="viz-content" class="hidden">
+                <!-- Stats Cards -->
+                <div class="features-grid" style="margin-bottom: var(--space-6);">
+                    <div class="card">
+                        <div class="card-icon primary">📄</div>
+                        <h4 id="stat-documents">0</h4>
+                        <p class="text-secondary">Total Dokumen</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon accent">🏷️</div>
+                        <h4 id="stat-topics">0</h4>
+                        <p class="text-secondary">Jumlah Topik</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon success">📊</div>
+                        <h4 id="stat-coherence">0</h4>
+                        <p class="text-secondary">Coherence Score</p>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="viz-grid">
+                    <!-- Topic Distribution Chart -->
+                    <div class="viz-card">
+                        <h3 class="viz-title">📊 Distribusi Dokumen per Topik</h3>
+                        <div class="chart-container">
+                            <canvas id="topic-distribution-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Topic Words Chart -->
+                    <div class="viz-card">
+                        <h3 class="viz-title">📈 Bobot Kata per Topik</h3>
+                        <div class="chart-container">
+                            <canvas id="topic-words-chart"></canvas>
+                        </div>
+                        <div class="form-group mt-4">
+                            <label class="form-label" for="topic-select">Pilih Topik:</label>
+                            <select id="topic-select" class="form-input" onchange="updateTopicWordsChart()">
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Topics List -->
+                    <div class="viz-card full-width">
+                        <h3 class="viz-title">🏷️ Daftar Topik dan Kata Kunci</h3>
+                        <ul class="topic-list" id="topics-list">
+                        </ul>
+                    </div>
+
+                    <!-- Document-Topic Table -->
+                    <div class="viz-card full-width">
+                        <h3 class="viz-title">📋 Distribusi Topik per Dokumen</h3>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--border-color);">
+                                        <th style="padding: var(--space-3); text-align: left;">ID</th>
+                                        <th style="padding: var(--space-3); text-align: left;">Judul</th>
+                                        <th style="padding: var(--space-3); text-align: left;">Topik Dominan</th>
+                                        <th style="padding: var(--space-3); text-align: left;">Probabilitas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="doc-topic-table">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/visualization.js"></script>
+</body>
+
+</html>

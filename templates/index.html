@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Aplikasi analisis tren berita bisnis berbasis LDA (Latent Dirichlet Allocation) dengan pendekatan Knowledge Discovery in Database">
+    <title>LDA News Trend - Analisis Tren Berita Bisnis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="navbar-brand">
+                <div class="icon">📊</div>
+                <span class="text-gradient">LDA News</span>
+            </a>
+            <ul class="navbar-nav">
+                <li><a href="/" class="active">Home</a></li>
+                <li><a href="/visualization">Visualisasi</a></li>
+                <li><a href="/login">Login</a></li>
+                <li><a href="/register">Register</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1 class="hero-title">
+                Analisis <span class="text-gradient">Tren Berita Bisnis</span>
+                <br>Berbasis LDA
+            </h1>
+            <p class="hero-subtitle">
+                Platform cerdas untuk menganalisis dan memvisualisasikan tren topik dari berita bisnis 
+                menggunakan algoritma Latent Dirichlet Allocation (LDA) dengan pendekatan 
+                Knowledge Discovery in Database (KDD).
+            </p>
+            <div class="hero-buttons">
+                <a href="/admin" class="btn btn-primary btn-lg">
+                    🚀 Mulai Analisis
+                </a>
+                <a href="/visualization" class="btn btn-secondary btn-lg">
+                    📈 Lihat Visualisasi
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section">
+        <div class="container">
+            <h2 class="text-center mb-6">Proses KDD dalam Aplikasi</h2>
+            <div class="features-grid">
+                <!-- Feature 1 -->
+                <div class="card">
+                    <div class="card-icon primary">📁</div>
+                    <h3 class="card-title">1. Selection</h3>
+                    <p class="card-text">
+                        Pemilihan data berita bisnis dari berbagai sumber. 
+                        Data mentah dikumpulkan dan dipilih berdasarkan kriteria relevansi.
+                    </p>
+                </div>
+                
+                <!-- Feature 2 -->
+                <div class="card">
+                    <div class="card-icon accent">🔧</div>
+                    <h3 class="card-title">2. Preprocessing</h3>
+                    <p class="card-text">
+                        Pembersihan dan normalisasi teks: case folding, tokenization, 
+                        stopword removal, dan stemming untuk Bahasa Indonesia.
+                    </p>
+                </div>
+                
+                <!-- Feature 3 -->
+                <div class="card">
+                    <div class="card-icon primary">🔄</div>
+                    <h3 class="card-title">3. Transforming</h3>
+                    <p class="card-text">
+                        Transformasi data teks menjadi representasi Bag-of-Words (BoW) 
+                        yang siap digunakan untuk pemodelan topik.
+                    </p>
+                </div>
+                
+                <!-- Feature 4 -->
+                <div class="card">
+                    <div class="card-icon accent">⚙️</div>
+                    <h3 class="card-title">4. Data Mining</h3>
+                    <p class="card-text">
+                        Penerapan algoritma LDA untuk menemukan topik tersembunyi 
+                        dari kumpulan dokumen berita bisnis.
+                    </p>
+                </div>
+                
+                <!-- Feature 5 -->
+                <div class="card">
+                    <div class="card-icon success">📊</div>
+                    <h3 class="card-title">5. Visualization</h3>
+                    <p class="card-text">
+                        Interpretasi hasil melalui visualisasi interaktif: 
+                        distribusi topik, kata-kata dominan, dan tren berita.
+                    </p>
+                </div>
+                
+                <!-- Feature 6 -->
+                <div class="card">
+                    <div class="card-icon success">🎯</div>
+                    <h3 class="card-title">LDA Algorithm</h3>
+                    <p class="card-text">
+                        Latent Dirichlet Allocation mengidentifikasi topik dengan 
+                        menganalisis distribusi kata pada setiap dokumen.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="section" style="background: var(--bg-card);">
+        <div class="container">
+            <h2 class="text-center mb-6">Cara Kerja Aplikasi</h2>
+            <div class="features-grid" style="max-width: 800px; margin: 0 auto;">
+                <div class="card" style="background: var(--bg-darker);">
+                    <h4>👨‍💼 Halaman Admin</h4>
+                    <p class="card-text">
+                        Mengelola seluruh proses KDD dari selection hingga data mining 
+                        melalui antarmuka yang intuitif dan mudah digunakan.
+                    </p>
+                </div>
+                <div class="card" style="background: var(--bg-darker);">
+                    <h4>📈 Halaman Visualisasi</h4>
+                    <p class="card-text">
+                        Menampilkan hasil pemodelan topik LDA dalam bentuk grafik 
+                        dan visualisasi interaktif untuk analisis mendalam.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="section">
+        <div class="container text-center">
+            <h2 class="mb-4">Siap Menganalisis Tren Berita?</h2>
+            <p class="text-secondary mb-6" style="max-width: 600px; margin: 0 auto var(--space-6);">
+                Daftar sekarang dan mulai analisis tren berita bisnis dengan teknologi 
+                machine learning terkini.
+            </p>
+            <div class="hero-buttons">
+                <a href="/register" class="btn btn-primary btn-lg">
+                    📝 Daftar Gratis
+                </a>
+                <a href="/login" class="btn btn-secondary btn-lg">
+                    🔐 Login
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="padding: var(--space-8) 0; border-top: 1px solid var(--border-color); text-align: center;">
+        <div class="container">
+            <p class="text-muted">
+                © 2024 LDA News Trend Analysis. Built with Python Flask & Gensim.
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
