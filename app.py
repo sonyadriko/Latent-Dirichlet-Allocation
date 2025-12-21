@@ -4,6 +4,7 @@ from config import Config
 from routes.auth import auth_bp
 from routes.kdd import kdd_bp
 from routes.search import search_bp
+from routes.project import project_bp
 
 # Initialize Flask app
 app = Flask(__name__, 
@@ -21,6 +22,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(kdd_bp, url_prefix='/api/kdd')
 app.register_blueprint(search_bp, url_prefix='/api/search')
+app.register_blueprint(project_bp, url_prefix='/api/projects')
 
 # Routes for pages
 @app.route('/')

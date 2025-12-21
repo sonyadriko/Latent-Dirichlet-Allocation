@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from gensim import corpora
 from gensim.models import LdaModel
 from gensim.models.coherencemodel import CoherenceModel
@@ -187,7 +188,7 @@ class LDAService:
         
         return topic_vector
     
-    def train_on_documents(self, documents, num_topics=None):
+    def train_on_documents(self, documents, num_topics=None, project_name=None, save_model=True):
         """Train LDA model on a list of document objects"""
         from services.preprocessing import TextPreprocessor
         
@@ -206,16 +207,111 @@ class LDAService:
         self.create_dictionary_and_corpus(preprocessed_docs)
         
         # Train LDA model
-        print(f"Training LDA with {num_topics or self.num_topics} topics...")
-        topics = self.train_lda(num_topics=num_topics)
+        actual_num_topics = num_topics or self.num_topics
+        print(f"Training LDA with {actual_num_topics} topics...")
+        topics = self.train_lda(num_topics=actual_num_topics)
         
         # Calculate coherence
         coherence = self.calculate_coherence(preprocessed_docs)
         
-        return {
+        result = {
             'num_documents': len(documents),
             'dictionary_size': len(self.dictionary),
             'num_topics': len(topics),
             'coherence_score': coherence,
             'topics': topics
         }
+        
+        # Save model if project name is provided
+        if save_model and project_name:
+            model_path = self.save_project_model(project_name, coherence, len(documents), actual_num_topics)
+            result['model_path'] = model_path
+        
+        return result
+    
+    def save_project_model(self, project_name, coherence_score, doc_count, num_topics):
+        """Save trained model for a specific project"""
+        from models.project import Project
+        
+        # Create project folder
+        project_folder = os.path.join(Config.RESULTS_DIR, project_name.replace(' ', '_').lower())
+        os.makedirs(project_folder, exist_ok=True)
+        
+        # Save model and dictionary
+        model_path = os.path.join(project_folder, 'lda_model')
+        self.save_model(model_path)
+        
+        # Save results
+        results_file = os.path.join(project_folder, 'results.json')
+        results = {
+            'project_name': project_name,
+            'coherence_score': coherence_score,
+            'document_count': doc_count,
+            'num_topics': num_topics,
+            'topics': self.get_topics(),
+            'training_date': datetime.now().isoformat()
+        }
+        self.save_results(results, results_file)
+        
+        # Create project record
+        try:
+            project, error = Project.create(
+                name=project_name,
+                description=f"LDA model with {num_topics} topics on {doc_count} documents",
+                num_topics=num_topics,
+                document_count=doc_count,
+                coherence_score=coherence_score
+            )
+            
+            if project:
+                return project.model_path
+        except Exception as e:
+            print(f"Error creating project record: {e}")
+        
+        return model_path
+    
+    def load_project_model(self, project_id=None, project_name=None):
+        """Load trained model for a specific project"""
+        from models.project import Project
+        
+        try:
+            # Get project by ID or name
+            if project_id:
+                project = Project.get_project_by_id(project_id)
+            elif project_name:
+                project = Project.get_project_by_name(project_name)
+            else:
+                return False, "Project ID or name is required"
+            
+            if not project:
+                return False, "Project not found"
+            
+            # Build model path
+            project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
+            model_path = os.path.join(project_folder, 'lda_model')
+            
+            # Load model
+            if os.path.exists(model_path + '_model') and os.path.exists(model_path + '_dict'):
+                self.load_model(model_path)
+                return True, f"Successfully loaded project: {project.name}"
+            else:
+                return False, "Model files not found for this project"
+                
+        except Exception as e:
+            return False, f"Error loading project model: {str(e)}"
+    
+    def get_available_projects(self):
+        """Get list of all available projects"""
+        from models.project import Project
+        
+        try:
+            projects = Project.get_all_projects()
+            return [p.to_dict() for p in projects]
+        except Exception as e:
+            print(f"Error getting projects: {e}")
+            return []
+    
+    def switch_to_project(self, project_id):
+        """Switch to a specific project model"""
+        success, message = self.load_project_model(project_id=project_id)
+        return success, message

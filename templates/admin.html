@@ -390,6 +390,50 @@
 
             <div id="alert-container"></div>
 
+            <!-- Project Selection Section -->
+            <div class="crawling-form">
+                <h2 style="text-align: center; margin-bottom: var(--space-4); color: var(--primary);">
+                    📁 Project Management
+                </h2>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label class="form-label" for="project-select">Select Existing Project</label>
+                        <select id="project-select" class="form-input" onchange="onProjectChange()">
+                            <option value="">-- Select Project --</option>
+                            <option value="new">+ Create New Project</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label">Action</label>
+                        <button type="button" class="btn btn-secondary" id="btn-load-project" onclick="loadProject()" disabled>
+                            📂 Load Project
+                        </button>
+                    </div>
+                </div>
+
+                <!-- New Project Form (Hidden by default) -->
+                <div id="new-project-form" class="hidden" style="margin-top: var(--space-4); padding: var(--space-4); background: rgba(99, 102, 241, 0.05); border-radius: var(--radius-lg);">
+                    <h3 style="color: var(--primary); margin-bottom: var(--space-4);">Create New Project</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="new-project-name">Project Name</label>
+                            <input type="text" id="new-project-name" class="form-input" placeholder="Project 1, Novel Analysis, etc.">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="new-project-description">Description</label>
+                            <input type="text" id="new-project-description" class="form-input" placeholder="Brief description...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Project Info -->
+                <div id="current-project-info" class="hidden" style="margin-top: var(--space-4); padding: var(--space-4); background: rgba(16, 185, 129, 0.05); border-radius: var(--radius-lg);">
+                    <h3 style="color: var(--success); margin-bottom: var(--space-2);">Current Project</h3>
+                    <div id="current-project-details"></div>
+                </div>
+            </div>
+
             <!-- Document Search Section -->
             <div class="crawling-form">
                 <h2 style="text-align: center; margin-bottom: var(--space-6); color: var(--primary);">
@@ -426,7 +470,7 @@
                     <button type="button" class="btn btn-secondary" id="btn-add-online" onclick="addOnlineDocuments()">
                         🌐 Add Online Results
                     </button>
-                    <button type="button" class="btn btn-secondary" id="btn-train" onclick="trainLDA()">
+                    <button type="button" class="btn btn-success" id="btn-train" onclick="trainLDA()">
                         🧠 Train LDA Model
                     </button>
                 </div>
@@ -551,13 +595,156 @@
 
     <script src="/static/js/auth.js"></script>
     <script>
+        // Global variables
+        let currentProject = null;
+        let availableProjects = [];
+
         // Check authentication
         document.addEventListener('DOMContentLoaded', () => {
             if (!checkAuth()) {
                 window.location.href = '/login';
                 return;
             }
+            loadProjects();
         });
+
+        // Load available projects
+        async function loadProjects() {
+            try {
+                const response = await apiRequest('/api/projects/');
+                if (response.success) {
+                    availableProjects = response.data;
+                    populateProjectSelect();
+                }
+            } catch (error) {
+                console.error('Error loading projects:', error);
+            }
+        }
+
+        // Populate project select dropdown
+        function populateProjectSelect() {
+            const select = document.getElementById('project-select');
+            
+            // Clear existing options except the first two
+            while (select.children.length > 2) {
+                select.removeChild(select.lastChild);
+            }
+            
+            // Add project options
+            availableProjects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = `${project.name} (${project.num_topics} topics, ${project.document_count} docs)`;
+                select.appendChild(option);
+            });
+        }
+
+        // Handle project selection change
+        function onProjectChange() {
+            const select = document.getElementById('project-select');
+            const newProjectForm = document.getElementById('new-project-form');
+            const loadBtn = document.getElementById('btn-load-project');
+            
+            if (select.value === 'new') {
+                newProjectForm.classList.remove('hidden');
+                loadBtn.disabled = true;
+                loadBtn.textContent = '📂 Load Project';
+            } else if (select.value) {
+                newProjectForm.classList.add('hidden');
+                loadBtn.disabled = false;
+                loadBtn.textContent = '📂 Load Project';
+            } else {
+                newProjectForm.classList.add('hidden');
+                loadBtn.disabled = true;
+                loadBtn.textContent = '📂 Load Project';
+            }
+        }
+
+        // Load existing project
+        async function loadProject() {
+            const projectId = document.getElementById('project-select').value;
+            if (!projectId) return;
+            
+            const loadBtn = document.getElementById('btn-load-project');
+            
+            try {
+                loadBtn.disabled = true;
+                loadBtn.innerHTML = '<div class="spinner"></div> Loading...';
+                
+                const response = await apiRequest(`/api/projects/${projectId}/load`, {
+                    method: 'POST'
+                });
+                
+                if (response.success) {
+                    currentProject = response.data.project;
+                    showCurrentProject();
+                    
+                    // Update num-topics field with project's topic count
+                    document.getElementById('num-topics').value = currentProject.num_topics;
+                    
+                    // Show success message
+                    showAlert(`Successfully loaded project: ${currentProject.name}`, 'success');
+                } else {
+                    showAlert('Failed to load project: ' + response.message, 'error');
+                }
+            } catch (error) {
+                showAlert('Error loading project: ' + error.message, 'error');
+            } finally {
+                loadBtn.disabled = false;
+                loadBtn.textContent = '📂 Load Project';
+            }
+        }
+
+        // Show current project info
+        function showCurrentProject() {
+            if (!currentProject) return;
+            
+            const currentProjectInfo = document.getElementById('current-project-info');
+            const currentProjectDetails = document.getElementById('current-project-details');
+            
+            currentProjectDetails.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); text-align: center;">
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">${currentProject.num_topics}</div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Topics</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">${currentProject.document_count}</div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Documents</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">${currentProject.coherence_score}</div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted);">Coherence</div>
+                    </div>
+                </div>
+                <p style="margin-top: var(--space-3); color: var(--text-secondary); font-size: 0.875rem;">
+                    ${currentProject.description || 'No description'}
+                </p>
+                <p style="margin-top: var(--space-2); color: var(--text-muted); font-size: 0.75rem;">
+                    Created: ${new Date(currentProject.created_at).toLocaleDateString()}
+                </p>
+            `;
+            
+            currentProjectInfo.classList.remove('hidden');
+        }
+
+        // Show alert message
+        function showAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('alert-container');
+            const alertClass = type === 'success' ? 'alert-success' : 
+                             type === 'error' ? 'alert-error' : 'alert-info';
+            
+            alertContainer.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
+                </div>
+            `;
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
         
         // File upload handling
         const fileInput = document.getElementById('file-input');
@@ -691,27 +878,66 @@
             const btnTrain = document.getElementById('btn-train');
             const alertContainer = document.getElementById('alert-container');
             
+            // Check if we have project name for new project
+            let projectName = null;
+            const projectSelect = document.getElementById('project-select').value;
+            
+            if (projectSelect === 'new') {
+                projectName = document.getElementById('new-project-name').value.trim();
+                const projectDescription = document.getElementById('new-project-description').value.trim();
+                
+                if (!projectName) {
+                    showAlert('Please enter a project name', 'error');
+                    return;
+                }
+            }
+            
             try {
                 // Show loading state
                 btnTrain.disabled = true;
                 btnTrain.innerHTML = '<div class="spinner"></div> Training...';
                 alertContainer.innerHTML = '';
                 
+                // Prepare request data
+                const requestData = { num_topics: parseInt(numTopics) };
+                if (projectName) {
+                    requestData.project_name = projectName;
+                    requestData.project_description = document.getElementById('new-project-description').value.trim();
+                }
+                
                 // Send train request
                 const response = await apiRequest('/api/search/train', {
                     method: 'POST',
-                    body: JSON.stringify({ num_topics: parseInt(numTopics) })
+                    body: JSON.stringify(requestData)
                 });
                 
                 if (response.success) {
+                    let message = '✓ LDA Model trained successfully!<br>';
+                    message += `Documents: ${response.data.num_documents}<br>`;
+                    message += `Topics: ${response.data.num_topics}<br>`;
+                    message += `Coherence Score: ${response.data.coherence_score}`;
+                    
+                    if (response.data.project_name) {
+                        message += `<br>Project: ${response.data.project_name}`;
+                    }
+                    
                     alertContainer.innerHTML = `
                         <div class="alert alert-success">
-                            ✓ LDA Model trained successfully!<br>
-                            Documents: ${response.data.num_documents}<br>
-                            Topics: ${response.data.num_topics}<br>
-                            Coherence Score: ${response.data.coherence_score}
+                            ${message}
                         </div>
                     `;
+                    
+                    // Reload projects if a new one was created
+                    if (response.data.project_name) {
+                        setTimeout(() => {
+                            loadProjects();
+                            // Reset form
+                            document.getElementById('new-project-name').value = '';
+                            document.getElementById('new-project-description').value = '';
+                            document.getElementById('project-select').value = '';
+                            onProjectChange();
+                        }, 1000);
+                    }
                 } else {
                     throw new Error(response.message);
                 }

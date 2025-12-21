@@ -57,6 +57,41 @@
                 </a>
             </div>
 
+            <!-- Search Section -->
+            <div class="card" style="margin-bottom: var(--space-6);">
+                <h2 style="text-align: center; margin-bottom: var(--space-4);">🔍 Document Search & Visualization</h2>
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label class="form-label" for="search-input">Search Documents</label>
+                        <input type="text" id="search-input" class="form-input" 
+                               placeholder="Ketik judul novel atau dokumen...">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label">Action</label>
+                        <button class="btn btn-primary" style="width: 100%;" onclick="searchAndVisualize()">
+                            🔍 Search & Visualize
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Results -->
+            <div id="search-visualization" class="hidden" style="margin-bottom: var(--space-6);">
+                <div class="viz-grid">
+                    <!-- Document Found -->
+                    <div class="viz-card">
+                        <h3 class="viz-title">📖 Document Found</h3>
+                        <div id="found-document"></div>
+                    </div>
+                    
+                    <!-- Similar Documents -->
+                    <div class="viz-card">
+                        <h3 class="viz-title">🔗 Similar Documents (LDA)</h3>
+                        <div id="similar-documents-visualization"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Visualization Content -->
             <div id="viz-content" class="hidden">
                 <!-- Stats Cards -->
@@ -75,6 +110,11 @@
                         <div class="card-icon success">📊</div>
                         <h4 id="stat-coherence">0</h4>
                         <p class="text-secondary">Coherence Score</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon warning">🔍</div>
+                        <h4 id="stat-searched">0</h4>
+                        <p class="text-secondary">Documents Searched</p>
                     </div>
                 </div>
 
@@ -108,6 +148,14 @@
                         </ul>
                     </div>
 
+                    <!-- Document Clustering Visualization -->
+                    <div class="viz-card full-width">
+                        <h3 class="viz-title">🎯 Document Clustering (LDA)</h3>
+                        <div class="chart-container" style="height: 500px;">
+                            <canvas id="document-clustering-chart"></canvas>
+                        </div>
+                    </div>
+
                     <!-- Document-Topic Table -->
                     <div class="viz-card full-width">
                         <h3 class="viz-title">📋 Distribusi Topik per Dokumen</h3>
@@ -117,6 +165,7 @@
                                     <tr style="border-bottom: 1px solid var(--border-color);">
                                         <th style="padding: var(--space-3); text-align: left;">ID</th>
                                         <th style="padding: var(--space-3); text-align: left;">Judul</th>
+                                        <th style="padding: var(--space-3); text-align: left;">Kategori</th>
                                         <th style="padding: var(--space-3); text-align: left;">Topik Dominan</th>
                                         <th style="padding: var(--space-3); text-align: left;">Probabilitas</th>
                                     </tr>
@@ -132,7 +181,416 @@
     </div>
 
     <script src="/static/js/auth.js"></script>
-    <script src="/static/js/visualization.js"></script>
+    <script>
+        // Global variables
+        let ldaData = null;
+        let charts = {};
+
+        // Check authentication
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!checkAuth()) {
+                window.location.href = '/login';
+                return;
+            }
+            loadVisualization();
+        });
+
+        // Load visualization data
+        async function loadVisualization() {
+            try {
+                const response = await apiRequest('/api/search/topics');
+                
+                if (response.success) {
+                    ldaData = response.data;
+                    initializeCharts();
+                    updateStats();
+                    document.getElementById('loading-state').classList.add('hidden');
+                    document.getElementById('viz-content').classList.remove('hidden');
+                } else {
+                    document.getElementById('loading-state').classList.add('hidden');
+                    document.getElementById('no-data-state').classList.remove('hidden');
+                }
+            } catch (error) {
+                document.getElementById('loading-state').classList.add('hidden');
+                document.getElementById('no-data-state').classList.remove('hidden');
+            }
+        }
+
+        // Search and visualize
+        async function searchAndVisualize() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) {
+                alert('Please enter a search term');
+                return;
+            }
+
+            try {
+                const response = await apiRequest(`/api/search/documents?query=${encodeURIComponent(query)}&online=true`);
+                
+                if (response.success) {
+                    displaySearchVisualization(response.data);
+                    
+                    // Update searched documents counter
+                    const searchedCount = (response.data.matches ? response.data.matches.length : 0) + 
+                                        (response.data.online_count ? response.data.online_count : 0);
+                    document.getElementById('stat-searched').textContent = searchedCount;
+                } else {
+                    alert('Search failed: ' + response.message);
+                }
+            } catch (error) {
+                alert('Search error: ' + error.message);
+            }
+        }
+
+        // Display search visualization
+        function displaySearchVisualization(data) {
+            const searchViz = document.getElementById('search-visualization');
+            const foundDoc = document.getElementById('found-document');
+            const similarDocs = document.getElementById('similar-documents-visualization');
+
+            // Display found document
+            if (data.best_match) {
+                const doc = data.best_match;
+                foundDoc.innerHTML = `
+                    <div class="card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(34, 197, 94, 0.1)); border: 2px solid var(--success);">
+                        <h4 style="color: var(--success); margin-bottom: var(--space-2);">${doc.title}</h4>
+                        <p style="color: var(--text-muted); margin-bottom: var(--space-2);">
+                            <strong>Author:</strong> ${doc.author || 'Unknown'} | 
+                            <strong>Category:</strong> ${doc.category || 'Unknown'}
+                        </p>
+                        <p style="color: var(--text-secondary);">${doc.content.substring(0, 150)}...</p>
+                    </div>
+                `;
+            }
+
+            // Display similar documents with visualization
+            if (data.similar_documents && data.similar_documents.length > 0) {
+                const similarityData = data.similar_documents.map((item, index) => ({
+                    x: Math.cos((index / data.similar_documents.length) * 2 * Math.PI) * (1 - item.similarity_score) + 0.5,
+                    y: Math.sin((index / data.similar_documents.length) * 2 * Math.PI) * (1 - item.similarity_score) + 0.5,
+                    r: 5 + item.similarity_score * 15,
+                    title: item.document.title,
+                    similarity: item.similarity_score,
+                    category: item.document.category
+                }));
+
+                createSimilarityChart(similarityData);
+
+                similarDocs.innerHTML = data.similar_documents.map(item => {
+                    const doc = item.document;
+                    return `
+                        <div class="card" style="margin-bottom: var(--space-3); border-left: 4px solid var(--primary);">
+                            <h5 style="margin: 0 0 var(--space-2) 0; color: var(--primary);">${doc.title}</h5>
+                            <p style="color: var(--text-muted); margin-bottom: var(--space-2); font-size: 0.875rem;">
+                                <strong>Similarity:</strong> ${(item.similarity_score * 100).toFixed(1)}% | 
+                                <strong>Category:</strong> ${doc.category || 'Unknown'}
+                            </p>
+                            <p style="color: var(--text-secondary); font-size: 0.875rem;">${doc.content.substring(0, 100)}...</p>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                similarDocs.innerHTML = '<p style="color: var(--text-muted);">No similar documents found in the same topic cluster.</p>';
+            }
+
+            searchViz.classList.remove('hidden');
+        }
+
+        // Initialize all charts
+        function initializeCharts() {
+            if (!ldaData) return;
+
+            createTopicDistributionChart();
+            createTopicWordsChart();
+            createDocumentClusteringChart();
+            populateTopicsList();
+            populateDocumentTopicTable();
+        }
+
+        // Create topic distribution chart
+        function createTopicDistributionChart() {
+            const ctx = document.getElementById('topic-distribution-chart').getContext('2d');
+            
+            const topicCounts = {};
+            ldaData.document_topics.forEach(doc => {
+                const topicId = doc.dominant_topic;
+                topicCounts[topicId] = (topicCounts[topicId] || 0) + 1;
+            });
+
+            const labels = Object.keys(topicCounts).map(id => `Topic ${parseInt(id) + 1}`);
+            const data = Object.values(topicCounts);
+
+            if (charts.topicDistribution) {
+                charts.topicDistribution.destroy();
+            }
+
+            charts.topicDistribution = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                            '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create topic words chart
+        function createTopicWordsChart() {
+            const ctx = document.getElementById('topic-words-chart').getContext('2d');
+            
+            const topicSelect = document.getElementById('topic-select');
+            topicSelect.innerHTML = ldaData.topics.map((topic, index) => 
+                `<option value="${index}">${topic.topic_name}</option>`
+            ).join('');
+
+            updateTopicWordsChart();
+        }
+
+        // Update topic words chart
+        function updateTopicWordsChart() {
+            const ctx = document.getElementById('topic-words-chart').getContext('2d');
+            const topicSelect = document.getElementById('topic-select');
+            const selectedTopic = ldaData.topics[parseInt(topicSelect.value)];
+
+            if (charts.topicWords) {
+                charts.topicWords.destroy();
+            }
+
+            charts.topicWords = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: selectedTopic.words.map(word => word.word),
+                    datasets: [{
+                        label: 'Word Weight',
+                        data: selectedTopic.words.map(word => word.weight),
+                        backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create document clustering chart
+        function createDocumentClusteringChart() {
+            const ctx = document.getElementById('document-clustering-chart').getContext('2d');
+            
+            const scatterData = ldaData.document_topics.map((doc, index) => {
+                const angle = (index / ldaData.document_topics.length) * 2 * Math.PI;
+                const radius = 1 - doc.dominant_prob;
+                return {
+                    x: Math.cos(angle) * radius * 3 + 3.5,
+                    y: Math.sin(angle) * radius * 3 + 3.5,
+                    r: 3 + doc.dominant_prob * 7,
+                    title: `Doc ${doc.doc_id}`,
+                    topic: `Topic ${doc.dominant_topic + 1}`,
+                    probability: doc.dominant_prob
+                };
+            });
+
+            if (charts.clustering) {
+                charts.clustering.destroy();
+            }
+
+            charts.clustering = new Chart(ctx, {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Documents',
+                        data: scatterData,
+                        backgroundColor: scatterData.map(doc => {
+                            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+                            return colors[parseInt(doc.topic.split(' ')[1]) - 1] || '#FF9F40';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const data = context.raw;
+                                    return `${data.title}: ${data.topic} (${(data.probability * 100).toFixed(1)}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Topic Space X'
+                            },
+                            min: 0,
+                            max: 7
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Topic Space Y'
+                            },
+                            min: 0,
+                            max: 7
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create similarity chart
+        function createSimilarityChart(similarityData) {
+            const ctx = document.getElementById('similar-documents-visualization');
+            
+            // Create canvas if it doesn't exist
+            if (!ctx.querySelector('canvas')) {
+                ctx.innerHTML = '<div class="chart-container" style="height: 300px;"><canvas id="similarity-chart"></canvas></div>';
+            }
+            
+            const canvasCtx = document.getElementById('similarity-chart').getContext('2d');
+            
+            if (charts.similarity) {
+                charts.similarity.destroy();
+            }
+
+            charts.similarity = new Chart(canvasCtx, {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Similar Documents',
+                        data: similarityData,
+                        backgroundColor: similarityData.map(doc => `rgba(99, 102, 241, ${doc.similarity})`)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const data = context.raw;
+                                    return `${data.title}: ${(data.similarity * 100).toFixed(1)}% similar`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Similarity Distance X'
+                            },
+                            min: 0,
+                            max: 1.5
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Similarity Distance Y'
+                            },
+                            min: 0,
+                            max: 1.5
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update statistics
+        function updateStats() {
+            document.getElementById('stat-documents').textContent = ldaData.document_topics.length;
+            document.getElementById('stat-topics').textContent = ldaData.topics.length;
+            document.getElementById('stat-coherence').textContent = '0.000'; // Will be updated if available
+            document.getElementById('stat-searched').textContent = '0';
+        }
+
+        // Populate topics list
+        function populateTopicsList() {
+            const topicsList = document.getElementById('topics-list');
+            topicsList.innerHTML = ldaData.topics.map(topic => {
+                const topWords = topic.words.slice(0, 5).map(w => w.word).join(', ');
+                return `
+                    <li class="topic-item">
+                        <strong>${topic.topic_name}:</strong> ${topWords}
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Populate document-topic table
+        function populateDocumentTopicTable() {
+            const tableBody = document.getElementById('doc-topic-table');
+            
+            // Get document details
+            const docDetails = {};
+            ldaData.document_topics.forEach(doc => {
+                docDetails[doc.doc_id] = doc;
+            });
+
+            tableBody.innerHTML = ldaData.document_topics.map(doc => {
+                const topicName = `Topic ${doc.dominant_topic + 1}`;
+                const probability = (doc.dominant_prob * 100).toFixed(1);
+                
+                return `
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: var(--space-3);">${doc.doc_id + 1}</td>
+                        <td style="padding: var(--space-3);">Document ${doc.doc_id + 1}</td>
+                        <td style="padding: var(--space-3);">-</td>
+                        <td style="padding: var(--space-3);">
+                            <span style="background: var(--primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">
+                                ${topicName}
+                            </span>
+                        </td>
+                        <td style="padding: var(--space-3);">${probability}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Add enter key support for search
+        document.getElementById('search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchAndVisualize();
+            }
+        });
+    </script>
 </body>
 
 </html>

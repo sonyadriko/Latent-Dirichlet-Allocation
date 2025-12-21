@@ -69,5 +69,24 @@ async function apiRequest(url, options = {}) {
         throw new Error('Session expired. Please login again.');
     }
 
-    return response.json();
+    // Check if response is valid JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Invalid response format. Expected JSON.');
+    }
+
+    const responseText = await response.text();
+    
+    // Check if response is empty
+    if (!responseText.trim()) {
+        throw new Error('Empty response from server.');
+    }
+
+    try {
+        return JSON.parse(responseText);
+    } catch (error) {
+        console.error('JSON Parse Error:', error);
+        console.error('Response Text:', responseText);
+        throw new Error(`JSON.parse: ${error.message}. Response: ${responseText.substring(0, 100)}`);
+    }
 }

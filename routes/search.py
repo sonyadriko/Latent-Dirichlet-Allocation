@@ -180,6 +180,8 @@ def train_lda_model(current_user):
     try:
         data = request.get_json()
         num_topics = data.get('num_topics', 5)
+        project_name = data.get('project_name')
+        project_description = data.get('project_description', '')
         
         # Load all documents
         documents = Document.get_all_documents()
@@ -190,11 +192,19 @@ def train_lda_model(current_user):
                 'message': f'Need at least {num_topics} documents to train {num_topics} topics'
             }), 400
         
-        # Train LDA model
-        results = lda_service.train_on_documents(documents, num_topics=num_topics)
+        # Train LDA model with project saving
+        results = lda_service.train_on_documents(
+            documents, 
+            num_topics=num_topics, 
+            project_name=project_name if project_name else None
+        )
         
         # Initialize search service after training
         service = get_search_service()
+        
+        # Add project info to response if project was created
+        if project_name:
+            results['project_name'] = project_name
         
         return jsonify({
             'success': True,
