@@ -17,7 +17,43 @@
             display: grid;
             grid-template-columns: 250px 1fr 280px;
             gap: var(--space-6);
-            height: calc(100vh - 200px);
+            min-height: 600px;
+        }
+
+        /* Mobile Navigation Toggle */
+        .mobile-nav-toggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            transition: transform var(--transition-normal);
+        }
+
+        .mobile-nav-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .sidebar-toggle {
+            display: none;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-2);
+            font-size: 0.875rem;
+            cursor: pointer;
+            width: 100%;
         }
 
         /* Left Sidebar */
@@ -40,6 +76,17 @@
             cursor: pointer;
             transition: all var(--transition-normal);
             border-left: 3px solid transparent;
+            min-height: 44px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        @media (max-width: 768px) {
+            .topic-item {
+                padding: var(--space-3) var(--space-4);
+                min-height: 48px;
+            }
         }
 
         .topic-item:hover {
@@ -183,8 +230,14 @@
 
         .info-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: var(--space-4);
+        }
+
+        @media (max-width: 768px) {
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         .info-card {
@@ -238,6 +291,24 @@
 
         .small-chart {
             height: 200px;
+            min-height: 150px;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            min-height: 300px;
+        }
+
+        @media (max-width: 768px) {
+            .chart-container {
+                min-height: 250px;
+            }
+
+            .small-chart {
+                height: 180px;
+                min-height: 150px;
+            }
         }
 
         .prominence-analysis {
@@ -319,7 +390,7 @@
         }
 
         /* Responsive Design */
-        @media (max-width: 1200px) {
+        @media (max-width: 1024px) {
             .viz-layout {
                 grid-template-columns: 1fr;
                 gap: var(--space-4);
@@ -327,23 +398,177 @@
 
             .topic-sidebar, .prominence-sidebar {
                 display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 999;
+                overflow-y: auto;
+                padding: var(--space-6);
+                background: rgba(255, 255, 255, 0.98);
+                backdrop-filter: blur(10px);
+            }
+
+            .prominence-sidebar {
+                left: auto;
             }
 
             .topic-sidebar.mobile-visible, .prominence-sidebar.mobile-visible {
                 display: block;
             }
 
+            .sidebar-toggle {
+                display: block;
+            }
+
+            .mobile-nav-toggle {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
             .chart-row, .topic-words-analysis {
                 grid-template-columns: 1fr;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .viz-layout {
+                gap: var(--space-3);
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-overview .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .viz-main-content {
+                padding-right: 0;
+            }
+
+            .chart-container {
+                min-height: 250px;
+            }
+
+            .small-chart {
+                height: 180px;
+            }
+
+            .topic-words-container {
+                grid-template-columns: 1fr;
+            }
+
+            .page-header {
+                padding: var(--space-4);
+            }
+
+            .page-title {
+                font-size: 1.5rem;
+            }
+
+            .viz-subtitle {
+                font-size: 1rem;
+            }
+
+            /* Larger touch targets */
+            .topic-item {
+                padding: var(--space-3) var(--space-4);
+                font-size: 1rem;
+            }
+
+            .btn-sm {
+                padding: var(--space-2) var(--space-3);
+                font-size: 0.875rem;
+                min-height: 44px;
+            }
+
+            .mode-btn {
+                padding: var(--space-3);
+                font-size: 1rem;
+                min-height: 48px;
+            }
+
+            /* Adjust project info cards */
+            #project-info-section {
+                padding: var(--space-3);
+            }
+
+            #project-info-section > div:first-child {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-2);
+            }
+
+            #project-info-section > div > div {
+                grid-template-columns: 1fr;
+            }
+
+            /* Mobile sidebar adjustments */
+            .topic-sidebar, .prominence-sidebar {
+                padding: var(--space-4);
+            }
+
+            .sidebar-toggle {
+                position: sticky;
+                top: 10px;
+                z-index: 10;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-overview .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-container {
+                min-height: 200px;
+            }
+
+            .page-title {
+                font-size: 1.25rem;
+            }
+
+            .project-info-section > div > div > div {
+                padding: var(--space-2);
+            }
+
+            .mobile-nav-toggle {
+                width: 48px;
+                height: 48px;
+                font-size: 20px;
+                bottom: 16px;
+                right: 16px;
             }
         }
     </style>
 </head>
 
 <body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleMainSidebar()">
+        ☰
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMainSidebar()"></div>
+
     <div class="dashboard">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="main-sidebar">
+            <button class="sidebar-close" onclick="closeMainSidebar()">✕</button>
+
             <div class="sidebar-brand">
                 <div class="icon">📊</div>
                 <span class="text-gradient">LDA News</span>
@@ -356,6 +581,11 @@
                 <li><a href="#" id="logout-btn">🚪 Logout</a></li>
             </ul>
         </aside>
+
+        <!-- Mobile Navigation Toggle -->
+        <button class="mobile-nav-toggle" id="mobile-nav-toggle" onclick="toggleMobileNav()">
+            ☰
+        </button>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -403,7 +633,7 @@
                     <h2 style="margin: 0;">📊 Project: <span id="current-project-name">-</span></h2>
                     <button onclick="switchProject()" class="btn btn-secondary btn-sm">🔄 Ganti Project</button>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-4);">
+                <div class="project-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-4);">
                     <div style="text-align: center; padding: var(--space-3); background: rgba(99, 102, 241, 0.1); border-radius: var(--radius-md);">
                         <div style="font-size: 1.5rem; font-weight: bold; color: var(--primary);" id="project-documents">-</div>
                         <div style="font-size: 0.875rem; color: var(--text-secondary);">Documents</div>
@@ -442,6 +672,9 @@
                 <div class="viz-layout">
                     <!-- Left Sidebar - Topic Navigation -->
                     <aside class="topic-sidebar">
+                        <button class="sidebar-toggle" onclick="toggleSidebar('topic-sidebar')">
+                            ✕ Close Topics
+                        </button>
                         <h3 style="margin-bottom: var(--space-4); color: var(--primary);">📋 Topik</h3>
                         <div id="topic-navigation" class="topic-nav">
                             <!-- Topics will be populated here -->
@@ -610,6 +843,9 @@
 
                     <!-- Right Sidebar - Topic Distribution & Prominence -->
                     <aside class="prominence-sidebar">
+                        <button class="sidebar-toggle" onclick="toggleSidebar('prominence-sidebar')">
+                            ✕ Close Distribution
+                        </button>
                         <h3 style="margin-bottom: var(--space-4); color: var(--primary);">📊 Distribusi Topik</h3>
                         
                         <!-- Topic Distribution Chart -->
@@ -654,6 +890,35 @@
         // Global variables
         let ldaData = null;
         let charts = {};
+
+        // Mobile Main Sidebar Functions
+        function toggleMainSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+
+            sidebar?.classList.toggle('active');
+            overlay?.classList.toggle('active');
+        }
+
+        function closeMainSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+
+            sidebar?.classList.remove('active');
+            overlay?.classList.remove('active');
+        }
+
+        // Close sidebar when clicking on menu links (mobile)
+        document.addEventListener('DOMContentLoaded', () => {
+            const menuLinks = document.querySelectorAll('.sidebar-menu a');
+            menuLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    if (window.innerWidth <= 1024) {
+                        closeMainSidebar();
+                    }
+                });
+            });
+        });
 
         // Check authentication
         document.addEventListener('DOMContentLoaded', () => {
@@ -775,11 +1040,41 @@
                         document.getElementById('viz-content').classList.remove('hidden');
                         document.getElementById('project-info-section').classList.remove('hidden');
                     } else {
-                        // Topics not found, but project loaded
-                        console.warn('Topics not found for loaded project');
-                        alert('Project berhasil dimuat, tapi tidak ada data topik. Silakan train ulang project ini.');
-                        document.getElementById('loading-state').classList.add('hidden');
-                        document.getElementById('no-data-state').classList.remove('hidden');
+                        // Topics not found, but project loaded - try to retrain
+                        console.warn('Topics not found for loaded project, attempting to retrain...');
+                        
+                        // Get project info
+                        const project = loadResponse.data.project;
+                        const trainResponse = await apiRequest('/api/search/train', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                num_topics: project.num_topics || 10,
+                                project_name: project.name,
+                                project_description: project.description || ''
+                            })
+                        });
+                        
+                        if (trainResponse.success) {
+                            // Load topics again after training
+                            const newTopicsResponse = await apiRequest('/api/search/topics');
+                            
+                            if (newTopicsResponse.success && newTopicsResponse.data.topics && newTopicsResponse.data.topics.length > 0) {
+                                ldaData = newTopicsResponse.data;
+                                initializeCharts();
+                                updateStats();
+                                populateTopicNavigation();
+                                showProjectInfo();
+                                
+                                document.getElementById('loading-state').classList.add('hidden');
+                                document.getElementById('no-data-state').classList.add('hidden');
+                                document.getElementById('viz-content').classList.remove('hidden');
+                                document.getElementById('project-info-section').classList.remove('hidden');
+                            } else {
+                                throw new Error('Gagal memuat topik setelah retraining');
+                            }
+                        } else {
+                            throw new Error(trainResponse.message || 'Gagal retrain project');
+                        }
                     }
                 } else {
                     // Project loading failed
@@ -1700,6 +1995,74 @@
         function showTopicDetails() {
             alert('Topic Details: Click on any topic in the left sidebar to see detailed analysis.');
         }
+
+        // Mobile Navigation Functions
+        let currentMobileSidebar = null;
+
+        function toggleMobileNav() {
+            const topicSidebar = document.querySelector('.topic-sidebar');
+            const prominenceSidebar = document.querySelector('.prominence-sidebar');
+            
+            // Cycle through sidebars: Topics -> Distribution -> Close
+            if (!currentMobileSidebar) {
+                // Show Topics sidebar
+                topicSidebar?.classList.add('mobile-visible');
+                prominenceSidebar?.classList.remove('mobile-visible');
+                currentMobileSidebar = 'topics';
+            } else if (currentMobileSidebar === 'topics') {
+                // Switch to Distribution sidebar
+                topicSidebar?.classList.remove('mobile-visible');
+                prominenceSidebar?.classList.add('mobile-visible');
+                currentMobileSidebar = 'distribution';
+            } else {
+                // Close all
+                topicSidebar?.classList.remove('mobile-visible');
+                prominenceSidebar?.classList.remove('mobile-visible');
+                currentMobileSidebar = null;
+            }
+        }
+
+        function toggleSidebar(sidebarClass) {
+            const sidebar = document.querySelector(`.${sidebarClass}`);
+            sidebar?.classList.toggle('mobile-visible');
+            
+            // Update current mobile sidebar state
+            if (sidebar?.classList.contains('mobile-visible')) {
+                currentMobileSidebar = sidebarClass === 'topic-sidebar' ? 'topics' : 'distribution';
+            } else {
+                currentMobileSidebar = null;
+            }
+        }
+
+        // Close sidebars when clicking outside
+        document.addEventListener('click', function(event) {
+            const topicSidebar = document.querySelector('.topic-sidebar');
+            const prominenceSidebar = document.querySelector('.prominence-sidebar');
+            const mobileNavToggle = document.getElementById('mobile-nav-toggle');
+            
+            // Check if click is outside sidebars and not on toggle button
+            if (window.innerWidth <= 1024) {
+                if (!event.target.closest('.topic-sidebar') && 
+                    !event.target.closest('.prominence-sidebar') &&
+                    !event.target.closest('.mobile-nav-toggle') &&
+                    !event.target.closest('.sidebar-toggle')) {
+                    
+                    topicSidebar?.classList.remove('mobile-visible');
+                    prominenceSidebar?.classList.remove('mobile-visible');
+                    currentMobileSidebar = null;
+                }
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 1024) {
+                // Remove mobile visibility classes on desktop
+                document.querySelector('.topic-sidebar')?.classList.remove('mobile-visible');
+                document.querySelector('.prominence-sidebar')?.classList.remove('mobile-visible');
+                currentMobileSidebar = null;
+            }
+        });
     </script>
 </body>
 

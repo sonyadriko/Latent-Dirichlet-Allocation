@@ -358,9 +358,19 @@
 </head>
 
 <body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleSidebar()">
+        ☰
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
     <div class="dashboard">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-close" onclick="closeSidebar()">✕</button>
+
             <div class="sidebar-brand">
                 <div class="icon">📊</div>
                 <span class="text-gradient">LDA News</span>
@@ -434,10 +444,28 @@
                 </div>
             </div>
 
-            <!-- Document Search Section -->
+            <!-- Input Mode Selection -->
             <div class="crawling-form">
                 <h2 style="text-align: center; margin-bottom: var(--space-6); color: var(--primary);">
-                    🔍 Document Search
+                    📥 Pilih Mode Input
+                </h2>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
+                    <button type="button" class="btn" id="mode-auto" onclick="setInputMode('auto')" 
+                            style="background: linear-gradient(135deg, var(--primary), var(--primary-light)); border: 3px solid var(--primary);">
+                        🤖 Pencarian Otomatis
+                    </button>
+                    <button type="button" class="btn" id="mode-manual" onclick="setInputMode('manual')"
+                            style="background: var(--bg-card); border: 3px solid var(--border-color);">
+                        📄 Upload File TXT
+                    </button>
+                </div>
+            </div>
+
+            <!-- Auto Search Mode -->
+            <div id="auto-search-section" class="crawling-form">
+                <h2 style="text-align: center; margin-bottom: var(--space-6); color: var(--primary);">
+                    🔍 Document Search (Otomatis)
                 </h2>
                 
                 <div class="form-row">
@@ -450,6 +478,17 @@
                     <div class="form-group" style="flex: 1;">
                         <label class="form-label" for="num-topics">Topics</label>
                         <input type="number" id="num-topics" class="form-input" value="5" min="2" max="20">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label" for="max-results">Max Results</label>
+                        <input type="number" id="max-results" class="form-input" value="10" min="1" max="50">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label" for="similarity-threshold">Similarity Min</label>
+                        <input type="number" id="similarity-threshold" class="form-input" value="0.3" min="0" max="1" step="0.1">
                     </div>
                 </div>
 
@@ -473,6 +512,45 @@
                     <button type="button" class="btn btn-success" id="btn-train" onclick="trainLDA()">
                         🧠 Train LDA Model
                     </button>
+                </div>
+            </div>
+
+            <!-- Manual Upload Mode -->
+            <div id="manual-upload-section" class="crawling-form hidden">
+                <h2 style="text-align: center; margin-bottom: var(--space-6); color: var(--primary);">
+                    📄 Upload File TXT (Manual)
+                </h2>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label class="form-label" for="num-topics-manual">Jumlah Topik</label>
+                        <input type="number" id="num-topics-manual" class="form-input" value="5" min="2" max="20">
+                    </div>
+                </div>
+
+                <div class="file-upload" id="file-upload-area" style="margin-bottom: var(--space-4);">
+                    <input type="file" id="file-input" accept=".txt">
+                    <div class="icon">📁</div>
+                    <p style="font-weight: 600; margin-bottom: var(--space-2);">Klik atau drag file TXT di sini</p>
+                    <p style="font-size: 0.875rem; color: var(--text-muted);">Satu baris = satu link URL</p>
+                    <div id="selected-filename" class="filename hidden"></div>
+                </div>
+
+                <div class="text-center">
+                    <button type="button" class="btn btn-crawl" id="btn-upload-crawl" onclick="uploadAndCrawl()">
+                        🚀 Upload & Crawling
+                    </button>
+                    <button type="button" class="btn btn-success" id="btn-train-manual" onclick="trainLDAFromManual()">
+                        🧠 Train LDA Model
+                    </button>
+                </div>
+
+                <div style="margin-top: var(--space-4); padding: var(--space-3); background: rgba(99, 102, 241, 0.05); border-radius: var(--radius-lg);">
+                    <h4 style="color: var(--primary); margin-bottom: var(--space-2);">📖 Format File TXT:</h4>
+                    <pre style="background: var(--bg-darker); padding: var(--space-2); border-radius: var(--radius-sm); font-size: 0.875rem; overflow-x: auto;">https://www.detik.com/berita-1
+https://www.kompas.com/berita-2
+https://www.cnnindonesia.com/berita-3
+...</pre>
                 </div>
             </div>
 
@@ -598,6 +676,36 @@
         // Global variables
         let currentProject = null;
         let availableProjects = [];
+        let currentInputMode = 'auto';
+
+        // Mobile Sidebar Functions
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+
+            sidebar?.classList.toggle('active');
+            overlay?.classList.toggle('active');
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+
+            sidebar?.classList.remove('active');
+            overlay?.classList.remove('active');
+        }
+
+        // Close sidebar when clicking on menu links (mobile)
+        document.addEventListener('DOMContentLoaded', () => {
+            const menuLinks = document.querySelectorAll('.sidebar-menu a');
+            menuLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    if (window.innerWidth <= 1024) {
+                        closeSidebar();
+                    }
+                });
+            });
+        });
 
         // Check authentication
         document.addEventListener('DOMContentLoaded', () => {
@@ -606,7 +714,198 @@
                 return;
             }
             loadProjects();
+            setupFileUpload();
         });
+
+        // Setup file upload
+        function setupFileUpload() {
+            const fileInput = document.getElementById('file-input');
+            const filenameDisplay = document.getElementById('selected-filename');
+            const fileUploadArea = document.getElementById('file-upload-area');
+            
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    filenameDisplay.textContent = `✓ ${file.name}`;
+                    filenameDisplay.classList.remove('hidden');
+                    fileUploadArea.style.borderColor = 'var(--success)';
+                }
+            });
+            
+            // Drag and drop
+            fileUploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                fileUploadArea.style.borderColor = 'var(--primary)';
+                fileUploadArea.style.background = 'rgba(99, 102, 241, 0.1)';
+            });
+            
+            fileUploadArea.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                fileUploadArea.style.borderColor = 'var(--border-color)';
+                fileUploadArea.style.background = 'transparent';
+            });
+            
+            fileUploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                fileUploadArea.style.borderColor = 'var(--border-color)';
+                fileUploadArea.style.background = 'transparent';
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    if (file.name.endsWith('.txt')) {
+                        fileInput.files = files;
+                        filenameDisplay.textContent = `✓ ${file.name}`;
+                        filenameDisplay.classList.remove('hidden');
+                        fileUploadArea.style.borderColor = 'var(--success)';
+                    } else {
+                        showAlert('Please upload a .txt file', 'error');
+                    }
+                }
+            });
+        }
+
+        // Input mode switching
+        function setInputMode(mode) {
+            currentInputMode = mode;
+            const autoSection = document.getElementById('auto-search-section');
+            const manualSection = document.getElementById('manual-upload-section');
+            const btnAuto = document.getElementById('mode-auto');
+            const btnManual = document.getElementById('mode-manual');
+            
+            if (mode === 'auto') {
+                autoSection.classList.remove('hidden');
+                manualSection.classList.add('hidden');
+                btnAuto.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
+                btnAuto.style.border = '3px solid var(--primary)';
+                btnManual.style.background = 'var(--bg-card)';
+                btnManual.style.border = '3px solid var(--border-color)';
+            } else {
+                autoSection.classList.add('hidden');
+                manualSection.classList.remove('hidden');
+                btnManual.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
+                btnManual.style.border = '3px solid var(--primary)';
+                btnAuto.style.background = 'var(--bg-card)';
+                btnAuto.style.border = '3px solid var(--border-color)';
+            }
+        }
+
+        // Upload and crawl function
+        async function uploadAndCrawl() {
+            const fileInput = document.getElementById('file-input');
+            const btnUpload = document.getElementById('btn-upload-crawl');
+            const alertContainer = document.getElementById('alert-container');
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                showAlert('Please select a TXT file first', 'error');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            try {
+                btnUpload.disabled = true;
+                btnUpload.innerHTML = '<div class="spinner"></div> Uploading & Crawling...';
+                alertContainer.innerHTML = '';
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/kdd/upload-and-crawl', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let message = `✓ Crawling completed!<br>`;
+                    message += `Total URLs: ${result.data.total}<br>`;
+                    message += `Success: ${result.data.success_count}<br>`;
+                    message += `Failed: ${result.data.failed_count}`;
+                    
+                    showAlert(message, 'success');
+                } else {
+                    throw new Error(result.message);
+                }
+                
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btnUpload.disabled = false;
+                btnUpload.innerHTML = '🚀 Upload & Crawling';
+            }
+        }
+
+        // Train LDA from manual upload
+        async function trainLDAFromManual() {
+            const numTopics = document.getElementById('num-topics-manual').value;
+            const btnTrain = document.getElementById('btn-train-manual');
+            const alertContainer = document.getElementById('alert-container');
+            
+            let projectName = null;
+            const projectSelect = document.getElementById('project-select').value;
+            
+            if (projectSelect === 'new') {
+                projectName = document.getElementById('new-project-name').value.trim();
+                
+                if (!projectName) {
+                    showAlert('Please enter a project name', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                btnTrain.disabled = true;
+                btnTrain.innerHTML = '<div class="spinner"></div> Training...';
+                alertContainer.innerHTML = '';
+                
+                const requestData = { num_topics: parseInt(numTopics) };
+                if (projectName) {
+                    requestData.project_name = projectName;
+                    requestData.project_description = document.getElementById('new-project-description').value.trim();
+                }
+                
+                const response = await apiRequest('/api/search/train', {
+                    method: 'POST',
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (response.success) {
+                    let message = '✓ LDA Model trained successfully!<br>';
+                    message += `Documents: ${response.data.num_documents}<br>`;
+                    message += `Topics: ${response.data.num_topics}<br>`;
+                    message += `Coherence Score: ${response.data.coherence_score}`;
+                    
+                    if (response.data.project_name) {
+                        message += `<br>Project: ${response.data.project_name}`;
+                    }
+                    
+                    showAlert(message, 'success');
+                    
+                    if (response.data.project_name) {
+                        setTimeout(() => {
+                            loadProjects();
+                            document.getElementById('new-project-name').value = '';
+                            document.getElementById('new-project-description').value = '';
+                            document.getElementById('project-select').value = '';
+                            onProjectChange();
+                        }, 1000);
+                    }
+                } else {
+                    throw new Error(response.message);
+                }
+                
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btnTrain.disabled = false;
+                btnTrain.innerHTML = '🧠 Train LDA Model';
+            }
+        }
 
         // Load available projects
         async function loadProjects() {
@@ -746,37 +1045,12 @@
             }, 5000);
         }
         
-        // File upload handling
-        const fileInput = document.getElementById('file-input');
-        const filenameDisplay = document.getElementById('selected-filename');
-        const fileUploadArea = document.getElementById('file-upload-area');
-        
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                filenameDisplay.textContent = `✓ ${file.name}`;
-                filenameDisplay.classList.remove('hidden');
-                fileUploadArea.style.borderColor = 'var(--success)';
-            }
-        });
-        
-        // Drag and drop
-        fileUploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            fileUploadArea.style.borderColor = 'var(--primary)';
-            fileUploadArea.style.background = 'rgba(99, 102, 241, 0.1)';
-        });
-        
-        fileUploadArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            fileUploadArea.style.borderColor = 'var(--border-color)';
-            fileUploadArea.style.background = 'transparent';
-        });
-        
         // Search documents function
         async function searchDocuments() {
             const searchInput = document.getElementById('search-input').value.trim();
             const includeOnline = document.getElementById('include-online').checked;
+            const maxResults = document.getElementById('max-results').value || 10;
+            const similarityThreshold = document.getElementById('similarity-threshold').value || 0.3;
             const btnSearch = document.getElementById('btn-search');
             const searchResults = document.getElementById('search-results');
             const onlineResults = document.getElementById('online-results');
@@ -795,8 +1069,10 @@
                 onlineResults.classList.add('hidden');
                 alertContainer.innerHTML = '';
                 
-                // Send search request
-                const response = await apiRequest(`/api/search/documents?query=${encodeURIComponent(searchInput)}&online=${includeOnline}`);
+                // Send search request with custom parameters
+                const response = await apiRequest(
+                    `/api/search/documents?query=${encodeURIComponent(searchInput)}&online=${includeOnline}&top_k=${maxResults}&threshold=${similarityThreshold}`
+                );
                 
                 if (response.success) {
                     displaySearchResults(response.data);

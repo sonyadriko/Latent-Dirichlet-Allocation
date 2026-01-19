@@ -4,6 +4,24 @@ from services.search_service import SearchService
 from services.lda_service import LDAService
 from services.online_crawler import OnlineDocumentCrawler
 from routes.auth import token_required
+import numpy as np
+
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization"""
+    if isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(item) for item in obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return convert_numpy_types(obj.tolist())
+    else:
+        return obj
 
 search_bp = Blueprint('search', __name__)
 
@@ -25,6 +43,8 @@ def search_documents():
     try:
         query = request.args.get('query', '').strip()
         include_online = request.args.get('online', 'true').lower() == 'true'
+        top_k = request.args.get('top_k', 10, type=int)
+        threshold = request.args.get('threshold', 0.3, type=float)
         
         if not query:
             return jsonify({
@@ -34,11 +54,11 @@ def search_documents():
         
         # Search local documents first
         service = get_search_service()
-        results = service.search_documents(query, top_k=10)
+        results = service.search_documents(query, top_k=top_k, similarity_threshold=threshold)
         
         # Search online if requested
         if include_online:
-            online_results = online_crawler.search_online_documents(query, max_results=5)
+            online_results = online_crawler.search_online_documents(query, max_results=top_k)
             
             # Add online results to the data
             results['online_documents'] = online_results
@@ -143,7 +163,13 @@ def add_online_documents(current_user):
     try:
         data = request.get_json()
         query = data.get('query', '').strip()
-        max_results = data.get('max_results', 10, type=int)
+        max_results = data.get('max_results', 10)
+        
+        # Convert max_results to int if it's a string
+        try:
+            max_results = int(max_results) if max_results else 10
+        except (ValueError, TypeError):
+            max_results = 10
         
         if not query:
             return jsonify({
@@ -222,7 +248,7 @@ def train_lda_model(current_user):
 def find_similar_documents(doc_id):
     """Find documents similar to a specific document"""
     try:
-        top_k = request.args.get('top_k', 5, type=int)
+        top_k = request.args.get('top_k', 10, type=int)
         threshold = request.args.get('threshold', 0.3, type=float)
         
         service = get_search_service()
@@ -280,6 +306,10 @@ def get_document_topics():
         
         doc_topics = lda_service.get_all_document_topics()
         topics = lda_service.get_topics()
+        
+        # Convert numpy types to native Python types
+        doc_topics = convert_numpy_types(doc_topics)
+        topics = convert_numpy_types(topics)
         
         return jsonify({
             'success': True,

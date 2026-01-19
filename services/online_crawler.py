@@ -39,13 +39,19 @@ class OnlineDocumentCrawler:
         """Search documents from multiple online sources"""
         results = []
         
-        # Search Google Books API
-        google_results = self._search_google_books(query, max_results)
-        results.extend(google_results)
+        try:
+            # Search Google Books API
+            google_results = self._search_google_books(query, max_results)
+            results.extend(google_results)
+        except Exception as e:
+            print(f"Google Books search error: {e}")
         
-        # Search Wikipedia Indonesia
-        wiki_results = self._search_wikipedia_id(query, max_results)
-        results.extend(wiki_results)
+        try:
+            # Search Wikipedia Indonesia
+            wiki_results = self._search_wikipedia_id(query, max_results)
+            results.extend(wiki_results)
+        except Exception as e:
+            print(f"Wikipedia search error: {e}")
         
         return results
     

@@ -6,33 +6,40 @@ class SearchService:
     def __init__(self, lda_service):
         self.lda_service = lda_service
     
-    def search_documents(self, query, top_k=10):
+    def search_documents(self, query, top_k=10, similarity_threshold=0.3):
         """Search documents by title query"""
-        # Find documents matching the query
-        matches = Document.search_by_title(query)
+        # Find documents matching the query using hybrid search (title + content)
+        matches_with_info = Document.search_by_title_or_content(query, threshold=75)
         
-        if not matches:
+        if not matches_with_info:
             return {
                 'query': query,
                 'matches': [],
                 'message': 'No documents found matching your query'
             }
         
+        # Extract documents from results
+        matches = [item['doc'] for item in matches_with_info]
+        
         # Get the best match (exact or first match)
         best_match = matches[0]
         
         # Find similar documents based on topic similarity
-        similar_docs = self.find_similar_documents(best_match.id, exclude_self=True, top_k=top_k)
+        similar_docs = self.find_similar_documents(best_match.id, exclude_self=True, top_k=top_k, similarity_threshold=similarity_threshold)
         
+        # Return matches with match_type info
         return {
             'query': query,
-            'matches': [doc.to_dict() for doc in matches],
+            'matches': [
+                {**doc.to_dict(), 'match_type': item['match_type'], 'relevance_score': item['score']}
+                for item, doc in zip(matches_with_info, matches)
+            ],
             'best_match': best_match.to_dict(),
             'similar_documents': similar_docs,
             'message': f'Found {len(matches)} document(s) matching "{query}"'
         }
     
-    def find_similar_documents(self, doc_id, exclude_self=True, top_k=5, similarity_threshold=0.3):
+    def find_similar_documents(self, doc_id, exclude_self=True, top_k=10, similarity_threshold=0.3):
         """Find documents in the same topic cluster"""
         if not self.lda_service.lda_model or not self.lda_service.corpus:
             return []
@@ -70,7 +77,7 @@ class SearchService:
                 if similarity >= similarity_threshold:
                     similarities.append({
                         'document': doc.to_dict(),
-                        'similarity_score': round(similarity, 3),
+                        'similarity_score': float(round(similarity, 3)),
                         'dominant_topic': self._get_dominant_topic(doc_topics)
                     })
         
@@ -124,8 +131,8 @@ class SearchService:
         
         dominant = max(topics, key=lambda x: x[1])
         return {
-            'topic_id': dominant[0],
-            'probability': round(dominant[1], 3)
+            'topic_id': int(dominant[0]),
+            'probability': float(round(dominant[1], 3))
         }
     
     def build_document_index(self):

@@ -482,3 +482,82 @@ def reset_pipeline(current_user):
         'success': True,
         'message': 'Pipeline berhasil direset'
     }), 200
+
+
+@kdd_bp.route('/upload-and-crawl', methods=['POST'])
+@token_required
+def upload_and_crawl(current_user):
+    """Upload TXT file and crawl URLs (separate from full pipeline)"""
+    try:
+        # Get uploaded file
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'File tidak ditemukan. Upload file .txt berisi link berita.'
+            }), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'message': 'Tidak ada file yang dipilih'
+            }), 400
+        
+        # Check file extension
+        if not file.filename.endswith('.txt'):
+            return jsonify({
+                'success': False,
+                'message': 'File harus berformat .txt'
+            }), 400
+        
+        # Read file content
+        file_content = file.read().decode('utf-8')
+        urls = crawler_service.parse_urls_from_file(file_content)
+        
+        if not urls:
+            return jsonify({
+                'success': False,
+                'message': 'Tidak ada URL valid ditemukan dalam file'
+            }), 400
+        
+        # Update state
+        kdd_state['status']['crawling'] = 'running'
+        
+        # Crawl URLs
+        crawl_results = crawler_service.crawl_urls(urls, delay=0.5)
+        kdd_state['crawl_results'] = crawl_results
+        
+        if crawl_results['success_count'] == 0:
+            kdd_state['status']['crawling'] = 'error'
+            return jsonify({
+                'success': False,
+                'message': 'Tidak ada konten berhasil di-crawl',
+                'data': {
+                    'failed': crawl_results['failed'][:10]
+                }
+            }), 400
+        
+        kdd_state['status']['crawling'] = 'completed'
+        kdd_state['raw_data'] = crawl_results['success']
+        kdd_state['selected_data'] = crawl_results['success']
+        kdd_state['status']['selection'] = 'completed'
+        
+        return jsonify({
+            'success': True,
+            'message': 'Crawling completed successfully',
+            'data': {
+                'total': crawl_results['total'],
+                'success_count': crawl_results['success_count'],
+                'failed_count': crawl_results['failed_count'],
+                'sample': crawl_results['success'][:3] if crawl_results['success'] else []
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Upload and crawl error: {traceback.format_exc()}")
+        kdd_state['status']['crawling'] = 'error'
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500

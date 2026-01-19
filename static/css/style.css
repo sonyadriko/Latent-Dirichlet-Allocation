@@ -462,6 +462,74 @@ h4 { font-size: 1.25rem; }
     left: 0;
     height: 100vh;
     overflow-y: auto;
+    z-index: 1000;
+    transition: transform var(--transition-normal);
+}
+
+/* Mobile sidebar toggle button */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: var(--space-4);
+    left: var(--space-4);
+    z-index: 1001;
+    width: 44px;
+    height: 44px;
+    background: var(--primary);
+    border: none;
+    border-radius: var(--radius-lg);
+    color: white;
+    font-size: 1.25rem;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-normal);
+}
+
+.mobile-menu-toggle:hover {
+    background: var(--primary-dark);
+    transform: scale(1.05);
+}
+
+/* Sidebar close button (mobile only) */
+.sidebar-close {
+    display: none;
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-4);
+    width: 36px;
+    height: 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.sidebar-close:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 999;
+    opacity: 0;
+    transition: opacity var(--transition-normal);
+}
+
+.sidebar-overlay.active {
+    opacity: 1;
 }
 
 .sidebar-brand {
@@ -842,14 +910,47 @@ h4 { font-size: 1.25rem; }
 @media (max-width: 1024px) {
     .sidebar {
         width: 240px;
+        transform: translateX(-100%);
     }
-    
+
+    .sidebar.active {
+        transform: translateX(0);
+    }
+
     .main-content {
-        margin-left: 240px;
+        margin-left: 0;
+        padding: var(--space-6) var(--space-4);
     }
-    
+
+    .mobile-menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar-close {
+        display: flex;
+    }
+
+    .sidebar-overlay {
+        display: block;
+    }
+
     .viz-grid {
         grid-template-columns: 1fr;
+    }
+
+    .features-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+    }
+
+    /* Add padding to account for mobile menu button */
+    .main-content {
+        padding-top: var(--space-16);
     }
 }
 
@@ -857,24 +958,124 @@ h4 { font-size: 1.25rem; }
     .navbar-nav {
         display: none;
     }
-    
+
     .hero-title {
-        font-size: 2.5rem;
+        font-size: 2rem;
     }
-    
+
+    .hero-subtitle {
+        font-size: 1rem;
+    }
+
     .hero-buttons {
         flex-direction: column;
+        width: 100%;
+        max-width: 300px;
+        margin: 0 auto;
     }
-    
+
+    .hero {
+        padding: 120px 0 80px;
+    }
+
     .sidebar {
-        display: none;
+        width: 280px;
+        max-width: 85vw;
     }
-    
+
     .main-content {
-        margin-left: 0;
+        padding: var(--space-12) var(--space-3) var(--space-4);
     }
-    
+
     .features-grid {
         grid-template-columns: 1fr;
+        gap: var(--space-4);
+    }
+
+    .card {
+        padding: var(--space-4);
+    }
+
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .hero-buttons .btn {
+        width: 100%;
+    }
+
+    .form-input {
+        font-size: 16px; /* Prevent iOS zoom */
+    }
+
+    .page-header {
+        margin-bottom: var(--space-4);
+        text-align: center;
+    }
+
+    .page-title {
+        font-size: 1.25rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.875rem;
+    }
+
+    /* Stats cards responsive */
+    .stats-overview .features-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-3);
+    }
+
+    /* Pipeline steps responsive */
+    .pipeline-step {
+        padding: var(--space-4);
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+
+    .chart-container {
+        height: 250px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 0 var(--space-3);
+    }
+
+    .hero-title {
+        font-size: 1.75rem;
+    }
+
+    .sidebar {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 0;
+    }
+
+    .stats-overview .features-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.25rem;
+    }
+
+    .mobile-menu-toggle {
+        width: 40px;
+        height: 40px;
+        font-size: 1.125rem;
+    }
+
+    .chart-container {
+        height: 200px;
     }
 }
