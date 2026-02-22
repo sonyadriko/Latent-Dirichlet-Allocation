@@ -556,6 +556,11 @@
 </head>
 
 <body>
+    <!-- Desktop Sidebar Toggle -->
+    <button class="desktop-sidebar-toggle" id="desktop-sidebar-toggle" onclick="toggleDesktopSidebar()" title="Toggle Sidebar">
+        ☰
+    </button>
+
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleMainSidebar()">
         ☰
@@ -906,6 +911,23 @@
 
             sidebar?.classList.remove('active');
             overlay?.classList.remove('active');
+        }
+
+        // Desktop Sidebar Toggle Function
+        function toggleDesktopSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const toggleBtn = document.getElementById('desktop-sidebar-toggle');
+
+            sidebar?.classList.toggle('collapsed');
+
+            // Update toggle button icon
+            if (sidebar?.classList.contains('collapsed')) {
+                toggleBtn.innerHTML = '→';
+                toggleBtn.title = 'Show Sidebar';
+            } else {
+                toggleBtn.innerHTML = '☰';
+                toggleBtn.title = 'Hide Sidebar';
+            }
         }
 
         // Close sidebar when clicking on menu links (mobile)

@@ -13,7 +13,7 @@ except LookupError:
 
 try:
     nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
+except (LookupError, OSError):
     nltk.download('punkt_tab', quiet=True)
 
 try:

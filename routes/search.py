@@ -39,7 +39,70 @@ def get_search_service():
 
 @search_bp.route('/documents', methods=['GET'])
 def search_documents():
-    """Search documents by title and find similar documents"""
+    """
+    Search Documents by Query
+    ---
+    tags:
+      - Search
+    parameters:
+      - in: query
+        name: query
+        type: string
+        required: true
+        description: Query untuk mencari dokumen berdasarkan title dan content
+        example: ekonomi indonesia
+      - in: query
+        name: online
+        type: boolean
+        default: true
+        description: Include online search results
+      - in: query
+        name: top_k
+        type: integer
+        default: 10
+        description: Jumlah hasil similar documents
+      - in: query
+        name: threshold
+        type: number
+        default: 0.3
+        description: Minimum similarity threshold (0-1)
+    responses:
+      200:
+        description: Search results with similar documents
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            data:
+              type: object
+              properties:
+                query:
+                  type: string
+                  example: ekonomi indonesia
+                matches:
+                  type: array
+                  items:
+                    type: object
+                best_match:
+                  type: object
+                similar_documents:
+                  type: array
+                  description: Dokumen dengan topik serupa
+                  items:
+                    type: object
+                online_documents:
+                  type: array
+                  description: Hasil pencarian online
+                online_count:
+                  type: integer
+                  example: 5
+      400:
+        description: Query parameter diperlukan
+      500:
+        description: Server error
+    """
     try:
         query = request.args.get('query', '').strip()
         include_online = request.args.get('online', 'true').lower() == 'true'
@@ -246,7 +309,59 @@ def train_lda_model(current_user):
 
 @search_bp.route('/similar/<int:doc_id>', methods=['GET'])
 def find_similar_documents(doc_id):
-    """Find documents similar to a specific document"""
+    """
+    Find Similar Documents by Topic
+    ---
+    tags:
+      - Search
+    parameters:
+      - in: path
+        name: doc_id
+        type: integer
+        required: true
+        description: ID dokumen target
+        example: 1
+      - in: query
+        name: top_k
+        type: integer
+        default: 10
+        description: Jumlah dokumen serupa yang akan diambil
+      - in: query
+        name: threshold
+        type: number
+        default: 0.3
+        description: Minimum similarity threshold (0-1)
+    responses:
+      200:
+        description: Daftar dokumen serupa
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+              example: true
+            data:
+              type: object
+              properties:
+                doc_id:
+                  type: integer
+                  example: 1
+                similar_documents:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      title:
+                        type: string
+                      similarity:
+                        type: number
+                        format: float
+                count:
+                  type: integer
+                  example: 5
+    """
     try:
         top_k = request.args.get('top_k', 10, type=int)
         threshold = request.args.get('threshold', 0.3, type=float)

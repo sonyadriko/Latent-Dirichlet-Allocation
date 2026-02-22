@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: lda-backend-app
+    ports:
+      - "3030:3030"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+      - SECRET_KEY=${SECRET_KEY:-lda-secret-key-2024}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-jwt-secret-key-lda-2024}
+    restart: unless-stopped
+    networks:
+      - lda-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "com.lda.description=LDA Topic Modeling Backend API"
+      - "com.lda.service=backend"
+
+networks:
+  lda-network:
+    driver: bridge
+
+volumes:
+  lda-data:
+    driver: local
