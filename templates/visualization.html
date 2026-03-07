@@ -737,7 +737,7 @@
                                             <div class="chart-container">
                                                 <canvas id="topic-distribution-chart"></canvas>
                                             <div class="chart-actions">
-                                                <button class="btn btn-sm" onclick="showTopicDetails()">📄 Lihat Detail</button>
+                                                <button class="btn btn-sm" onclick="showTopicDetails(0)">📄 Lihat Detail</button>
                                             <button class="btn btn-sm" onclick="downloadChart('topic-distribution')">💾 Download</button>
                                             </div>
                                         </div>
@@ -2014,10 +2014,6 @@
 
         function showClusteringLegend() {
             alert('Clustering Legend: Each color represents a different topic cluster. Bubble size indicates topic probability.');
-        }
-
-        function showTopicDetails() {
-            alert('Topic Details: Click on any topic in the left sidebar to see detailed analysis.');
         }
 
         // Mobile Navigation Functions
