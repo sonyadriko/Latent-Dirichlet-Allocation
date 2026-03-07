@@ -1,5 +1,5 @@
-# Use Python 3.11 slim image
-FROM python:3.11-slim
+# Use Python 3.12 slim image
+FROM python:3.12-slim
 
 # Set working directory
 WORKDIR /app
@@ -34,5 +34,5 @@ RUN mkdir -p data/results
 # Expose port
 EXPOSE 3030
 
-# Run the application
-CMD ["python", "app.py"]
+# Run the application with uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "3030", "--reload"]

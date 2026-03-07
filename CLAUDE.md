@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+**Python Version:** 3.11+ (Dockerfile uses python:3.11-slim)
+
 ### Docker Deployment (Recommended)
 ```bash
 # Build and run with Docker Compose
@@ -45,11 +47,15 @@ The application includes Swagger/OpenAPI documentation available at `/docs`. All
 
 ### Local Development
 ```bash
-# Activate virtual environment
+# Create and activate virtual environment (if not exists)
+python3.11 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Download required NLTK data (first time setup)
+python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
 
 # Run the Flask application
 python app.py

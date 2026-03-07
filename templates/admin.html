@@ -405,6 +405,32 @@
 
             <div id="alert-container"></div>
 
+            <!-- Instructions - Auto Mode -->
+            <div class="card mt-6" id="instructions-auto">
+                <h3 class="card-title">📖 Cara Penggunaan (Mode Otomatis)</h3>
+                <ol style="padding-left: var(--space-6); color: var(--text-secondary);">
+                    <li style="margin-bottom: var(--space-2);">Masukkan <strong>judul dokumen</strong> yang ingin dicari.</li>
+                    <li style="margin-bottom: var(--space-2);">Atur <strong>jumlah topik</strong> dan parameter lain.</li>
+                    <li style="margin-bottom: var(--space-2);">Klik <strong>"Search Documents"</strong> untuk mencari dokumen terkait.</li>
+                    <li style="margin-bottom: var(--space-2);">Klik <strong>"Train LDA Model"</strong> untuk melatih model.</li>
+                    <li style="margin-bottom: var(--space-2);">Lihat hasil visualisasi setelah training selesai.</li>
+                </ol>
+            </div>
+
+            <!-- Instructions - Manual Mode -->
+            <div class="card mt-6 hidden" id="instructions-manual">
+                <h3 class="card-title">📖 Cara Penggunaan (Mode Upload File)</h3>
+                <ol style="padding-left: var(--space-6); color: var(--text-secondary);">
+                    <li style="margin-bottom: var(--space-2);">Masukkan <strong>nama project</strong> untuk identifikasi analisis.</li>
+                    <li style="margin-bottom: var(--space-2);">Siapkan file <strong>.txt</strong> berisi daftar URL berita (satu URL per baris).</li>
+                    <li style="margin-bottom: var(--space-2);">Upload file melalui tombol <strong>"Upload Link"</strong>.</li>
+                    <li style="margin-bottom: var(--space-2);">Klik <strong>"Upload & Crawling"</strong> untuk crawl URL.</li>
+                    <li style="margin-bottom: var(--space-2);">Klik <strong>"Train LDA Model"</strong> untuk melatih model.</li>
+                    <li style="margin-bottom: var(--space-2);">Tunggu hingga seluruh proses KDD selesai.</li>
+                    <li>Lihat hasil visualisasi setelah training selesai.</li>
+                </ol>
+            </div>
+
             <!-- Project Selection Section -->
             <div class="crawling-form">
                 <h2 style="text-align: center; margin-bottom: var(--space-4); color: var(--primary);">
@@ -597,81 +623,60 @@ https://www.cnnindonesia.com/berita-3
                 </div>
             </div>
 
-                <!-- Progress Indicator -->
-                <div class="progress-container hidden" id="progress-container">
-                    <div class="progress-steps">
-                        <div class="progress-step" id="step-crawling">
-                            <div class="step-icon">1</div>
-                            <span class="step-label">Crawling</span>
-                        </div>
-                        <div class="progress-step" id="step-preprocessing">
-                            <div class="step-icon">2</div>
-                            <span class="step-label">Preprocessing</span>
-                        </div>
-                        <div class="progress-step" id="step-transforming">
-                            <div class="step-icon">3</div>
-                            <span class="step-label">Transforming</span>
-                        </div>
-                        <div class="progress-step" id="step-datamining">
-                            <div class="step-icon">4</div>
-                            <span class="step-label">LDA</span>
-                        </div>
-                        <div class="progress-step" id="step-done">
-                            <div class="step-icon">✓</div>
-                            <span class="step-label">Selesai</span>
-                        </div>
+            <!-- Progress Indicator -->
+            <div class="progress-container hidden" id="progress-container">
+                <div class="progress-steps">
+                    <div class="progress-step" id="step-crawling">
+                        <div class="step-icon">1</div>
+                        <span class="step-label">Crawling</span>
                     </div>
-
-                    <div class="log-output" id="log-output">
-                        <div class="log-line info">Memulai proses...</div>
+                    <div class="progress-step" id="step-preprocessing">
+                        <div class="step-icon">2</div>
+                        <span class="step-label">Preprocessing</span>
+                    </div>
+                    <div class="progress-step" id="step-transforming">
+                        <div class="step-icon">3</div>
+                        <span class="step-label">Transforming</span>
+                    </div>
+                    <div class="progress-step" id="step-datamining">
+                        <div class="step-icon">4</div>
+                        <span class="step-label">LDA</span>
+                    </div>
+                    <div class="progress-step" id="step-done">
+                        <div class="step-icon">✓</div>
+                        <span class="step-label">Selesai</span>
                     </div>
                 </div>
 
-                <!-- Result Summary -->
-                <div class="result-summary hidden" id="result-summary">
-                    <div class="result-card">
-                        <div class="value" id="result-crawled">0</div>
-                        <div class="label">Berita di-Crawl</div>
-                    </div>
-                    <div class="result-card">
-                        <div class="value" id="result-topics">0</div>
-                        <div class="label">Topik Ditemukan</div>
-                    </div>
-                    <div class="result-card">
-                        <div class="value" id="result-coherence">0</div>
-                        <div class="label">Coherence Score</div>
-                    </div>
+                <div class="log-output" id="log-output">
+                    <div class="log-line info">Memulai proses...</div>
+                </div>
+            </div>
+
+            <!-- Result Summary -->
+            <div class="result-summary hidden" id="result-summary">
+                <div class="result-card">
+                    <div class="value" id="result-crawled">0</div>
+                    <div class="label">Berita di-Crawl</div>
+                </div>
+                <div class="result-card">
+                    <div class="value" id="result-topics">0</div>
+                    <div class="label">Topik Ditemukan</div>
+                </div>
+                <div class="result-card">
+                    <div class="value" id="result-coherence">0</div>
+                    <div class="label">Coherence Score</div>
                 </div>
             </div>
 
             <!-- Action Buttons -->
-            <div class="flex gap-4 mt-6">
+            <div class="flex gap-4 mt-6" id="action-buttons">
                 <button class="btn btn-secondary" onclick="resetPipeline()">
                     🔄 Reset Pipeline
                 </button>
                 <a href="/visualization" class="btn btn-success" id="btn-viz">
                     📈 Lihat Hasil Visualisasi
                 </a>
-            </div>
-
-            <!-- Instructions -->
-            <div class="card mt-6">
-                <h3 class="card-title">📖 Cara Penggunaan</h3>
-                <ol style="padding-left: var(--space-6); color: var(--text-secondary);">
-                    <li style="margin-bottom: var(--space-2);">Masukkan <strong>nama project</strong> untuk identifikasi
-                        analisis Anda.</li>
-                    <li style="margin-bottom: var(--space-2);">Siapkan file <strong>.txt</strong> berisi daftar URL
-                        berita (satu URL per baris).</li>
-                    <li style="margin-bottom: var(--space-2);">Upload file melalui tombol <strong>"Upload
-                            Link"</strong>.</li>
-                    <li style="margin-bottom: var(--space-2);">Tentukan <strong>jumlah topik</strong> yang diinginkan
-                        (default: 5).</li>
-                    <li style="margin-bottom: var(--space-2);">Klik tombol <strong>"Crawling"</strong> untuk memulai
-                        proses.</li>
-                    <li style="margin-bottom: var(--space-2);">Tunggu hingga seluruh proses KDD selesai secara otomatis.
-                    </li>
-                    <li>Lihat hasil visualisasi di halaman <strong>Visualisasi</strong>.</li>
-                </ol>
             </div>
         </main>
     </div>
@@ -703,9 +708,11 @@ https://www.cnnindonesia.com/berita-3
         // Desktop Sidebar Toggle Function
         function toggleDesktopSidebar() {
             const sidebar = document.getElementById('sidebar');
+            const dashboard = document.querySelector('.dashboard');
             const toggleBtn = document.getElementById('desktop-sidebar-toggle');
 
             sidebar?.classList.toggle('collapsed');
+            dashboard?.classList.toggle('sidebar-collapsed');
 
             // Update toggle button icon
             if (sidebar?.classList.contains('collapsed')) {
@@ -735,6 +742,19 @@ https://www.cnnindonesia.com/berita-3
                 window.location.href = '/login';
                 return;
             }
+
+            // Hide action buttons initially
+            const actionButtons = document.getElementById('action-buttons');
+            if (actionButtons) {
+                actionButtons.classList.add('hidden');
+            }
+
+            // Hide manual instructions initially (auto mode is default)
+            const instructionsManual = document.getElementById('instructions-manual');
+            if (instructionsManual) {
+                instructionsManual.classList.add('hidden');
+            }
+
             loadProjects();
             setupFileUpload();
         });
@@ -792,12 +812,18 @@ https://www.cnnindonesia.com/berita-3
             currentInputMode = mode;
             const autoSection = document.getElementById('auto-search-section');
             const manualSection = document.getElementById('manual-upload-section');
+            const actionButtons = document.getElementById('action-buttons');
+            const instructionsAuto = document.getElementById('instructions-auto');
+            const instructionsManual = document.getElementById('instructions-manual');
             const btnAuto = document.getElementById('mode-auto');
             const btnManual = document.getElementById('mode-manual');
-            
+
             if (mode === 'auto') {
                 autoSection.classList.remove('hidden');
                 manualSection.classList.add('hidden');
+                actionButtons.classList.add('hidden');
+                instructionsAuto.classList.remove('hidden');
+                instructionsManual.classList.add('hidden');
                 btnAuto.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                 btnAuto.style.border = '3px solid var(--primary)';
                 btnManual.style.background = 'var(--bg-card)';
@@ -805,6 +831,9 @@ https://www.cnnindonesia.com/berita-3
             } else {
                 autoSection.classList.add('hidden');
                 manualSection.classList.remove('hidden');
+                actionButtons.classList.add('hidden');
+                instructionsAuto.classList.add('hidden');
+                instructionsManual.classList.remove('hidden');
                 btnManual.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                 btnManual.style.border = '3px solid var(--primary)';
                 btnAuto.style.background = 'var(--bg-card)';
@@ -859,6 +888,15 @@ https://www.cnnindonesia.com/berita-3
             } finally {
                 btnUpload.disabled = false;
                 btnUpload.innerHTML = '🚀 Upload & Crawling';
+            }
+        }
+
+        // Show action buttons after process completes
+        function showActionButtons() {
+            const actionButtons = document.getElementById('action-buttons');
+            if (actionButtons) {
+                actionButtons.classList.remove('hidden');
+                actionButtons.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
 
@@ -917,6 +955,9 @@ https://www.cnnindonesia.com/berita-3
                             onProjectChange();
                         }, 1000);
                     }
+
+                    // Show action buttons after successful training
+                    showActionButtons();
                 } else {
                     throw new Error(response.message);
                 }
@@ -1224,7 +1265,7 @@ https://www.cnnindonesia.com/berita-3
                             ${message}
                         </div>
                     `;
-                    
+
                     // Reload projects if a new one was created
                     if (response.data.project_name) {
                         setTimeout(() => {
@@ -1236,6 +1277,9 @@ https://www.cnnindonesia.com/berita-3
                             onProjectChange();
                         }, 1000);
                     }
+
+                    // Show action buttons after successful training
+                    showActionButtons();
                 } else {
                     throw new Error(response.message);
                 }

@@ -621,15 +621,20 @@ h4 { font-size: 1.25rem; }
 }
 
 .main-content {
-    flex: 1;
-    margin-left: 280px;
-    padding: var(--space-8);
-    transition: margin-left var(--transition-normal);
+    width: 100%;
+    padding: var(--space-8) var(--space-8) var(--space-8) 300px;
+    box-sizing: border-box;
+    transition: padding var(--transition-normal);
 }
 
 /* Main content when sidebar is collapsed */
 .sidebar.collapsed ~ .main-content {
-    margin-left: 0;
+    padding-left: var(--space-8);
+}
+
+/* Alternative: when dashboard has sidebar-collapsed class */
+.dashboard.sidebar-collapsed .main-content {
+    padding-left: var(--space-8);
 }
 
 .page-header {

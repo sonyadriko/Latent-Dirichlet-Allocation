@@ -1,152 +1,139 @@
-from flask import Flask, render_template, send_from_directory
-from flask_cors import CORS
-from flasgger import Swagger
+"""
+FastAPI application for LDA Topic Modeling
+Migrated from Flask to FastAPI for better async support and type safety
+"""
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from config import Config
-from routes.auth import auth_bp
-from routes.kdd import kdd_bp
-from routes.search import search_bp
-from routes.project import project_bp
+from routers import auth, kdd, search, project
 
-# Initialize Flask app
-app = Flask(__name__,
-            static_folder='static',
-            template_folder='templates')
 
-# Configuration
-app.config.from_object(Config)
-Config.init_app()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events
+    """
+    # Initialize directories on startup
+    Config.init_app()
 
-# Enable CORS
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # Print startup message
+    print("=" * 50)
+    print("LDA Business News Trend Application")
+    print("FastAPI Framework")
+    print("=" * 50)
 
-# Swagger Configuration
-swagger_config = {
-    "headers": [],
-    "specs": [
-        {
-            "endpoint": 'apispec',
-            "route": '/apispec.json',
-            "rule_filter": lambda rule: True,
-            "model_filter": lambda tag: True,
-        }
-    ],
-    "static_url_path": "/flasgger_static",
-    "swagger_ui": True,
-    "specs_route": "/docs"
-}
+    yield
 
-swagger_template = {
-    "swagger": "2.0",
-    "info": {
-        "title": "LDA Topic Modeling API",
-        "description": "API untuk LDA Topic Modeling pada berita bisnis Indonesia dengan KDD Pipeline",
-        "contact": {
-            "name": "API Support",
-            "email": "support@lda-api.com"
-        },
-        "version": "1.0.0"
-    },
-    "host": "localhost:3030",
-    "basePath": "/api",
-    "schemes": [
-        "http",
-        "https"
-    ],
-    "consumes": [
-        "application/json"
-    ],
-    "produces": [
-        "application/json"
-    ],
-    "securityDefinitions": {
-        "Bearer": {
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header",
-            "description": "JWT Authorization header menggunakan format: 'Bearer {token}'"
-        }
-    },
-    "tags": [
-        {
-            "name": "Authentication",
-            "description": "API endpoints untuk autentikasi user"
-        },
-        {
-            "name": "KDD Pipeline",
-            "description": "API endpoints untuk KDD Pipeline (Crawling, Preprocessing, Transforming, Data Mining)"
-        },
-        {
-            "name": "Search",
-            "description": "API endpoints untuk pencarian dokumen"
-        },
-        {
-            "name": "Projects",
-            "description": "API endpoints untuk manajemen project"
-        },
-        {
-            "name": "Health",
-            "description": "API endpoint untuk health check"
-        }
-    ]
-}
+    # Cleanup on shutdown
+    print("Shutting down application...")
 
-swagger = Swagger(app, config=swagger_config, template=swagger_template)
 
-# Register blueprints
-app.register_blueprint(auth_bp, url_prefix='/api/auth')
-app.register_blueprint(kdd_bp, url_prefix='/api/kdd')
-app.register_blueprint(search_bp, url_prefix='/api/search')
-app.register_blueprint(project_bp, url_prefix='/api/projects')
+# Create FastAPI application
+app = FastAPI(
+    title="LDA Topic Modeling API",
+    description="API untuk LDA Topic Modeling pada berita bisnis Indonesia dengan KDD Pipeline",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
 
-# Routes for pages
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.route('/login')
-def login():
-    return render_template('login.html')
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.route('/register')
-def register():
-    return render_template('register.html')
+# Setup templates
+templates = Jinja2Templates(directory="templates")
 
-@app.route('/admin')
-def admin():
-    return render_template('admin.html')
+# Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(kdd.router, prefix="/api/kdd", tags=["KDD Pipeline"])
+app.include_router(search.router, prefix="/api/search", tags=["Search"])
+app.include_router(project.router, prefix="/api/projects", tags=["Projects"])
 
-@app.route('/visualization')
-def visualization():
-    return render_template('visualization.html')
 
-# Health check
-@app.route('/api/health')
-def health():
+# Health check endpoint
+@app.get("/api/health", tags=["Health"])
+async def health():
     """
     Health Check Endpoint
-    ---
-    tags:
-      - Health
-    responses:
-      200:
-        description: Server is running
-        schema:
-          type: object
-          properties:
-            status:
-              type: string
-              example: ok
-            message:
-              type: string
-              example: Server is running
-    """
-    return {'status': 'ok', 'message': 'Server is running'}
 
-if __name__ == '__main__':
-    print("="*50)
+    Returns the current status of the server.
+    """
+    return {
+        "status": "ok",
+        "message": "Server is running",
+        "framework": "FastAPI"
+    }
+
+
+# Page routes
+@app.get("/")
+async def index(request: Request):
+    """
+    Main page
+    """
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/login")
+async def login(request: Request):
+    """
+    Login page
+    """
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.get("/register")
+async def register(request: Request):
+    """
+    Register page
+    """
+    return templates.TemplateResponse("register.html", {"request": request})
+
+
+@app.get("/admin")
+async def admin(request: Request):
+    """
+    Admin dashboard page
+    """
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+
+@app.get("/visualization")
+async def visualization(request: Request):
+    """
+    Visualization page
+    """
+    return templates.TemplateResponse("visualization.html", {"request": request})
+
+
+# Entry point for running with uvicorn directly
+if __name__ == "__main__":
+    import uvicorn
+
+    print("=" * 50)
     print("LDA Business News Trend Application")
-    print("="*50)
+    print("FastAPI Framework")
+    print("=" * 50)
     print("Server running at: http://localhost:3030")
     print("API Documentation: http://localhost:3030/docs")
-    print("="*50)
-    app.run(debug=True, host='0.0.0.0', port=3030)
+    print("=" * 50)
+
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=3030,
+        reload=True
+    )

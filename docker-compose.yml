@@ -9,8 +9,6 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - FLASK_ENV=production
-      - FLASK_APP=app.py
       - SECRET_KEY=${SECRET_KEY:-lda-secret-key-2024}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-jwt-secret-key-lda-2024}
     restart: unless-stopped
