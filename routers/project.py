@@ -120,12 +120,49 @@ async def load_project(project_id: int, current_user: User = Depends(get_current
 
 
 @router.delete("/{project_id}/delete")
-async def delete_project(
+async def delete_project(project_id: int):
+    """Delete Project (JSON-based for backward compatibility)"""
+    try:
+        project = Project.get_project_by_id(project_id)
+
+        if not project:
+            return {
+                'success': False,
+                'message': f'Project not found: {project_id}'
+            }
+
+        # Delete model files from filesystem
+        if project.name:
+            LDAService.delete_project_files(project.name)
+
+        # Delete from JSON file
+        success = Project.delete_project(project_id)
+
+        if success:
+            return {
+                'success': True,
+                'message': f'Project "{project.name}" deleted successfully'
+            }
+        else:
+            return {
+                'success': False,
+                'message': 'Failed to delete project'
+            }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error deleting project: {str(e)}'
+        }
+
+
+@router.delete("/{project_id}/delete-db")
+async def delete_project_db(
     project_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Delete Project"""
+    """Delete Project from Database"""
     from repositories.project_repository import ProjectRepository
 
     try:

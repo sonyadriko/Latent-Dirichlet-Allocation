@@ -524,44 +524,9 @@
 </head>
 
 <body>
-    <!-- Desktop Sidebar Toggle -->
-    <button class="desktop-sidebar-toggle" id="desktop-sidebar-toggle" onclick="toggleDesktopSidebar()" title="Toggle Sidebar">
-        ☰
-    </button>
-
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleSidebar()">
-        ☰
-    </button>
-
-    <!-- Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+    {% include "components/sidebar.html" %}
 
     <div class="dashboard">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <button class="sidebar-close" onclick="closeSidebar()">✕</button>
-
-            <div class="sidebar-brand">
-                <div class="icon">📊</div>
-                <span class="text-gradient">LDA News</span>
-            </div>
-
-            <ul class="sidebar-menu">
-                <li><a href="/admin" class="active">🏠 Dashboard</a></li>
-                <li><a href="/visualization">📈 Visualisasi</a></li>
-                <li><a href="/">🌐 Homepage</a></li>
-                <li><a href="#" id="logout-btn">🚪 Logout</a></li>
-            </ul>
-
-            <div style="margin-top: auto; padding-top: var(--space-8);">
-                <div class="card" style="padding: var(--space-4);">
-                    <p class="text-muted" style="font-size: 0.8rem;">Logged in as:</p>
-                    <p id="user-name" style="font-weight: 600;">-</p>
-                </div>
-            </div>
-        </aside>
-
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
@@ -854,6 +819,9 @@ https://www.cnnindonesia.com/berita-3
                 <button class="btn btn-secondary" onclick="resetPipeline()">
                     🔄 Reset Pipeline
                 </button>
+                <a href="/projects" class="btn btn-secondary">
+                    📁 Manajemen Project
+                </a>
                 <a href="/visualization" class="btn btn-success" id="btn-viz">
                     📈 Lihat Hasil Visualisasi
                 </a>
@@ -867,54 +835,6 @@ https://www.cnnindonesia.com/berita-3
         let currentProject = null;
         let availableProjects = [];
         let currentInputMode = 'auto';
-
-        // Mobile Sidebar Functions
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebar-overlay');
-
-            sidebar?.classList.toggle('active');
-            overlay?.classList.toggle('active');
-        }
-
-        function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebar-overlay');
-
-            sidebar?.classList.remove('active');
-            overlay?.classList.remove('active');
-        }
-
-        // Desktop Sidebar Toggle Function
-        function toggleDesktopSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const dashboard = document.querySelector('.dashboard');
-            const toggleBtn = document.getElementById('desktop-sidebar-toggle');
-
-            sidebar?.classList.toggle('collapsed');
-            dashboard?.classList.toggle('sidebar-collapsed');
-
-            // Update toggle button icon
-            if (sidebar?.classList.contains('collapsed')) {
-                toggleBtn.innerHTML = '→';
-                toggleBtn.title = 'Show Sidebar';
-            } else {
-                toggleBtn.innerHTML = '☰';
-                toggleBtn.title = 'Hide Sidebar';
-            }
-        }
-
-        // Close sidebar when clicking on menu links (mobile)
-        document.addEventListener('DOMContentLoaded', () => {
-            const menuLinks = document.querySelectorAll('.sidebar-menu a');
-            menuLinks.forEach(link => {
-                link.addEventListener('click', () => {
-                    if (window.innerWidth <= 1024) {
-                        closeSidebar();
-                    }
-                });
-            });
-        });
 
         // Check authentication
         document.addEventListener('DOMContentLoaded', () => {

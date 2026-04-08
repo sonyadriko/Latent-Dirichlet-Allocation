@@ -599,37 +599,9 @@
 </head>
 
 <body>
-    <!-- Desktop Sidebar Toggle -->
-    <button class="desktop-sidebar-toggle" id="desktop-sidebar-toggle" onclick="toggleDesktopSidebar()" title="Toggle Sidebar">
-        ☰
-    </button>
-
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" onclick="toggleMainSidebar()">
-        ☰
-    </button>
-
-    <!-- Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeMainSidebar()"></div>
+    {% include "components/sidebar.html" %}
 
     <div class="dashboard">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="main-sidebar">
-            <button class="sidebar-close" onclick="closeMainSidebar()">✕</button>
-
-            <div class="sidebar-brand">
-                <div class="icon">📊</div>
-                <span class="text-gradient">LDA News</span>
-            </div>
-
-            <ul class="sidebar-menu">
-                <li><a href="/admin">🏠 Dashboard</a></li>
-                <li><a href="/visualization" class="active">📈 Visualisasi</a></li>
-                <li><a href="/">🌐 Homepage</a></li>
-                <li><a href="#" id="logout-btn">🚪 Logout</a></li>
-            </ul>
-        </aside>
-
         <!-- Mobile Navigation Toggle -->
         <button class="mobile-nav-toggle" id="mobile-nav-toggle" onclick="toggleMobileNav()">
             ☰
@@ -951,54 +923,6 @@
         // Global variables
         let ldaData = null;
         let charts = {};
-
-        // Mobile Main Sidebar Functions
-        function toggleMainSidebar() {
-            const sidebar = document.getElementById('main-sidebar');
-            const overlay = document.getElementById('sidebar-overlay');
-
-            sidebar?.classList.toggle('active');
-            overlay?.classList.toggle('active');
-        }
-
-        function closeMainSidebar() {
-            const sidebar = document.getElementById('main-sidebar');
-            const overlay = document.getElementById('sidebar-overlay');
-
-            sidebar?.classList.remove('active');
-            overlay?.classList.remove('active');
-        }
-
-        // Desktop Sidebar Toggle Function
-        function toggleDesktopSidebar() {
-            const sidebar = document.getElementById('main-sidebar');
-            const dashboard = document.querySelector('.dashboard');
-            const toggleBtn = document.getElementById('desktop-sidebar-toggle');
-
-            sidebar?.classList.toggle('collapsed');
-            dashboard?.classList.toggle('sidebar-collapsed');
-
-            // Update toggle button icon
-            if (sidebar?.classList.contains('collapsed')) {
-                toggleBtn.innerHTML = '→';
-                toggleBtn.title = 'Show Sidebar';
-            } else {
-                toggleBtn.innerHTML = '☰';
-                toggleBtn.title = 'Hide Sidebar';
-            }
-        }
-
-        // Close sidebar when clicking on menu links (mobile)
-        document.addEventListener('DOMContentLoaded', () => {
-            const menuLinks = document.querySelectorAll('.sidebar-menu a');
-            menuLinks.forEach(link => {
-                link.addEventListener('click', () => {
-                    if (window.innerWidth <= 1024) {
-                        closeMainSidebar();
-                    }
-                });
-            });
-        });
 
         // Check authentication
         document.addEventListener('DOMContentLoaded', () => {

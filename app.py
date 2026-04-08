@@ -3,6 +3,7 @@ FastAPI application for LDA Topic Modeling
 Migrated from Flask to FastAPI for better async support and type safety
 """
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,7 +143,7 @@ async def admin(request: Request):
     """
     Admin dashboard page
     """
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse("admin.html", {"request": request, "active_page": "admin"})
 
 
 @app.get("/visualization")
@@ -150,7 +151,19 @@ async def visualization(request: Request):
     """
     Visualization page
     """
-    return templates.TemplateResponse("visualization.html", {"request": request})
+    return templates.TemplateResponse("visualization.html", {"request": request, "active_page": "visualization"})
+
+
+@app.get("/projects")
+async def projects(request: Request):
+    """
+    Project management page
+    Authentication is handled client-side via localStorage
+    """
+    return templates.TemplateResponse("projects.html", {
+        "request": request,
+        "active_page": "projects"
+    })
 
 
 # Entry point for running with uvicorn directly

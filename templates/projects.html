@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manajemen Project - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/auth.js"></script>
+</head>
+<body>
+    {% include "components/sidebar.html" %}
+
+    <div class="dashboard">
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+                <!-- Header -->
+                <header class="page-header">
+                    <div class="header-content">
+                        <h1>📁 Manajemen Project</h1>
+                        <div class="header-actions">
+                            <button class="btn-refresh" onclick="loadProjects()">🔄 Refresh</button>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Projects Table -->
+                <div class="projects-section">
+                    <div id="projects-table" class="projects-table">
+                        <div class="projects-loading">Memuat projects...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load all projects
+        async function loadProjects() {
+            const container = document.getElementById('projects-table');
+
+            try {
+                container.innerHTML = '<div class="projects-loading">Memuat projects...</div>';
+                const response = await apiRequest('/api/projects/');
+
+                if (response.success) {
+                    renderProjectsTable(response.data);
+                } else {
+                    container.innerHTML = `
+                        <div class="projects-error">
+                            <p>Gagal memuat projects: ${escapeHtml(response.message)}</p>
+                            <button class="btn btn-secondary" onclick="loadProjects()">Coba Lagi</button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="projects-error">
+                        <p>Error: ${escapeHtml(error.message)}</p>
+                        <button class="btn btn-secondary" onclick="loadProjects()">Coba Lagi</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Render projects table
+        function renderProjectsTable(projects) {
+            const container = document.getElementById('projects-table');
+
+            if (!projects || projects.length === 0) {
+                container.innerHTML = '<p class="projects-empty">Belum ada project. Buat project untuk memulai.</p>';
+                return;
+            }
+
+            const headerHtml = `
+                <div class="project-header">
+                    <div>Nama Project</div>
+                    <div class="project-stat-label">Topics</div>
+                    <div class="project-stat-label">Documents</div>
+                    <div class="project-stat-label">Coherence</div>
+                    <div class="project-stat-label">Status</div>
+                    <div>Aksi</div>
+                </div>
+            `;
+
+            const rowsHtml = projects.map(project => `
+                <div class="project-row" data-id="${project.id}">
+                    <div>
+                        <div class="project-name">${escapeHtml(project.name)}</div>
+                        ${project.description ? `<div class="project-description">${escapeHtml(project.description)}</div>` : ''}
+                    </div>
+                    <div class="project-stat">
+                        <div class="project-stat-value">${project.num_topics || 0}</div>
+                        <div class="project-stat-label">Topics</div>
+                    </div>
+                    <div class="project-stat">
+                        <div class="project-stat-value">${project.document_count || 0}</div>
+                        <div class="project-stat-label">Docs</div>
+                    </div>
+                    <div class="project-stat">
+                        <div class="project-stat-value">${(project.coherence_score || 0).toFixed(3)}</div>
+                        <div class="project-stat-label">Cv Score</div>
+                    </div>
+                    <div>
+                        <span class="project-status ${project.status || 'active'}">
+                            ${project.status || 'active'}
+                        </span>
+                    </div>
+                    <div>
+                        <button class="btn-delete" onclick="deleteProject(${project.id}, '${escapeHtml(project.name)}')">
+                            🗑️ Hapus
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = headerHtml + rowsHtml;
+        }
+
+        // Delete project with confirmation
+        async function deleteProject(projectId, projectName) {
+            const confirmMsg = `Anda yakin ingin menghapus "${projectName}"?\n\nAksi ini akan menghapus:\n- Database records\n- Model files\n- Semua data terkait\n\nAksi tidak dapat dibatalkan.`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            const container = document.getElementById('projects-table');
+            const row = container.querySelector(`.project-row[data-id="${projectId}"]`);
+            const button = row?.querySelector('.btn-delete');
+
+            if (button) {
+                button.disabled = true;
+                button.textContent = '⏳ Menghapus...';
+            }
+
+            try {
+                const response = await apiRequest(`/api/projects/${projectId}/delete`, {
+                    method: 'DELETE'
+                });
+
+                if (response.success) {
+                    // Animate row removal
+                    if (row) {
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateX(-20px)';
+                        setTimeout(() => {
+                            row.remove();
+                            // Check if table is empty
+                            const remainingRows = container.querySelectorAll('.project-row');
+                            if (remainingRows.length === 0) {
+                                renderProjectsTable([]);
+                            }
+                        }, 300);
+                    }
+                } else {
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = '🗑️ Hapus';
+                    }
+                    alert(`Gagal menghapus project: ${escapeHtml(response.message)}`);
+                }
+            } catch (error) {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = '🗑️ Hapus';
+                }
+                alert(`Error: ${escapeHtml(error.message)}`);
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            if (checkAuth()) {
+                loadProjects();
+            }
+        });
+    </script>
+
+    <style>
+        .page-header {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin-bottom: var(--space-6);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-4);
+        }
+
+        .header-content h1 {
+            margin: 0;
+            color: var(--primary);
+            font-size: 1.75rem;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: var(--space-3);
+        }
+
+        .projects-section {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .projects-table {
+            min-height: 200px;
+        }
+
+        .projects-loading,
+        .projects-empty,
+        .projects-error {
+            text-align: center;
+            padding: var(--space-8);
+            color: var(--text-muted);
+        }
+
+        .projects-error {
+            color: var(--error);
+        }
+
+        .project-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 100px;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .project-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 100px;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            border-bottom: 1px solid var(--border-color);
+            align-items: center;
+            transition: all var(--transition-normal);
+        }
+
+        .project-row:last-child {
+            border-bottom: none;
+        }
+
+        .project-row:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .project-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .project-description {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: var(--space-1);
+        }
+
+        .project-stat {
+            text-align: center;
+        }
+
+        .project-stat-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .project-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .project-status {
+            display: inline-block;
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--radius-full);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .project-status.active {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+        }
+
+        .project-status.deleted {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid var(--error);
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 500;
+            transition: all var(--transition-normal);
+        }
+
+        .btn-delete:hover:not(:disabled) {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-delete:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-refresh {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 500;
+            transition: all var(--transition-normal);
+        }
+
+        .btn-refresh:hover {
+            background: var(--primary-dark);
+        }
+
+        @media (max-width: 768px) {
+            .project-header,
+            .project-row {
+                grid-template-columns: 1fr;
+                gap: var(--space-2);
+            }
+
+            .project-header {
+                display: none;
+            }
+
+            .project-row {
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: var(--space-4);
+                margin-bottom: var(--space-3);
+            }
+        }
+    </style>
+</body>
+</html>
