@@ -315,3 +315,102 @@ class LDAService:
         """Switch to a specific project model"""
         success, message = self.load_project_model(project_id=project_id)
         return success, message
+
+    def get_pyldavis_data(self, corpus=None, sort_topics=True):
+        """
+        Prepare pyLDAvis visualization data from current model.
+
+        Args:
+            corpus: Corpus in bag-of-words format (uses self.corpus if None)
+            sort_topics: Whether to sort topics by relevance
+
+        Returns:
+            Dictionary with pyLDAvis data or None if model not trained
+        """
+        if self.lda_model is None or self.dictionary is None:
+            return None
+
+        # Use provided corpus or fall back to instance corpus
+        if corpus is None:
+            corpus = self.corpus
+
+        if corpus is None:
+            return None
+
+        try:
+            from services.pyldavis_service import PyLDAvisService
+
+            vis_data = PyLDAvisService.prepare_data(
+                self.lda_model,
+                self.dictionary,
+                corpus,
+                sort_topics=sort_topics
+            )
+
+            return PyLDAvisService.get_json_data(vis_data)
+
+        except Exception as e:
+            print(f"Error preparing pyLDAvis data: {e}")
+            return None
+
+    def save_pyldavis_html(self, filepath, corpus=None):
+        """
+        Save pyLDAvis visualization to HTML file.
+
+        Args:
+            filepath: Path to save HTML file
+            corpus: Corpus in bag-of-words format (uses self.corpus if None)
+
+        Returns:
+            Tuple (success: bool, message: str)
+        """
+        if self.lda_model is None or self.dictionary is None:
+            return False, "Model not trained"
+
+        if corpus is None:
+            corpus = self.corpus
+
+        if corpus is None:
+            return False, "Corpus not available"
+
+        try:
+            from services.pyldavis_service import PyLDAvisService
+
+            vis_data = PyLDAvisService.prepare_data(
+                self.lda_model,
+                self.dictionary,
+                corpus,
+                sort_topics=True
+            )
+
+            return PyLDAvisService.save_html(vis_data, filepath)
+
+        except Exception as e:
+            return False, f"Error saving pyLDAvis HTML: {str(e)}"
+
+    @staticmethod
+    def delete_project_files(project_name: str) -> bool:
+        """
+        Delete all files associated with a project.
+
+        Args:
+            project_name: Name of the project whose files should be deleted
+
+        Returns:
+            True if files were deleted, False if folder didn't exist
+        """
+        import shutil
+
+        project_folder = os.path.join(
+            Config.RESULTS_DIR,
+            project_name.replace(' ', '_').lower()
+        )
+
+        if os.path.exists(project_folder):
+            try:
+                shutil.rmtree(project_folder)
+                return True
+            except Exception as e:
+                print(f"Error deleting project files: {e}")
+                return False
+        return False

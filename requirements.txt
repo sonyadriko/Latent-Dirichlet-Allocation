@@ -10,6 +10,15 @@ python-multipart==0.0.9
 # HTML templates
 jinja2==3.1.4
 
+# Database (NEW for Phase 2)
+sqlalchemy[asyncio]==2.0.25
+aiosqlite==0.19.0
+alembic==1.13.1
+
+# Data validation (NEW for Phase 2)
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
 # Data processing and NLP (existing)
 gensim>=4.3.3
 nltk==3.8.1

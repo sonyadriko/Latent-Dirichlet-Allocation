@@ -3,11 +3,14 @@ Project router for FastAPI
 Handles project management for LDA models
 """
 from typing import Optional
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.project import Project
 from services.lda_service import LDAService
 from core.security import get_current_user
+from core.database import get_session
 from models.user import User
+from core.exceptions import NotFoundException
 
 router = APIRouter()
 
@@ -29,6 +32,28 @@ async def get_projects():
         return {
             'success': False,
             'message': f'Error getting projects: {str(e)}'
+        }
+
+
+@router.get("/list")
+async def list_projects(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """List all projects for the admin UI"""
+    from repositories.project_repository import ProjectRepository
+
+    try:
+        projects = await ProjectRepository.list_projects(session)
+        return {
+            'success': True,
+            'data': [p.to_dict() for p in projects],
+            'message': f'Found {len(projects)} projects'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error listing projects: {str(e)}'
         }
 
 
@@ -95,19 +120,26 @@ async def load_project(project_id: int, current_user: User = Depends(get_current
 
 
 @router.delete("/{project_id}/delete")
-async def delete_project(project_id: int, current_user: User = Depends(get_current_user)):
+async def delete_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
     """Delete Project"""
+    from repositories.project_repository import ProjectRepository
+
     try:
-        project = Project.get_project_by_id(project_id)
-
+        # Get project first
+        project = await ProjectRepository.get_by_id(session, project_id)
         if not project:
-            return {
-                'success': False,
-                'message': 'Project not found'
-            }
+            raise NotFoundException("Project", project_id)
 
-        # Delete the project
-        success = Project.delete_project(project_id)
+        # Delete model files from filesystem
+        if project.name:
+            LDAService.delete_project_files(project.name)
+
+        # Delete from database (cascade deletes documents, pipeline_runs)
+        success = await ProjectRepository.delete(session, project_id)
 
         if success:
             return {
@@ -115,16 +147,23 @@ async def delete_project(project_id: int, current_user: User = Depends(get_curre
                 'message': f'Project "{project.name}" deleted successfully'
             }
         else:
-            return {
-                'success': False,
-                'message': 'Failed to delete project'
-            }
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='Failed to delete project from database'
+            )
 
+    except NotFoundException as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            'success': False,
-            'message': f'Error deleting project: {str(e)}'
-        }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Error deleting project: {str(e)}'
+        )
 
 
 @router.post("/{project_id}/clone")
@@ -209,4 +248,78 @@ async def get_project_stats():
         return {
             'success': False,
             'message': f'Error getting project stats: {str(e)}'
+        }
+
+
+@router.get("/{project_id}/pyldavis")
+async def get_project_pyldavis(project_id: int):
+    """
+    Get pyLDAvis visualization data for a specific project.
+
+    Args:
+        project_id: ID of the project
+
+    Returns JSON data compatible with pyLDAvis JavaScript visualization.
+    """
+    try:
+        # Get project
+        project = Project.get_project_by_id(project_id)
+
+        if not project:
+            return {
+                'success': False,
+                'message': f'Project with ID {project_id} not found'
+            }
+
+        # Load project model
+        success, message = lda_service.load_project_model(project_id=project_id)
+
+        if not success:
+            return {
+                'success': False,
+                'message': f'Failed to load project model: {message}'
+            }
+
+        # Try to load preprocessed data for the project if available
+        import os
+        import json
+        from config import Config
+
+        project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
+        data_file = os.path.join(project_folder, f'{project.name}_data.json')
+
+        corpus = None
+        if os.path.exists(data_file):
+            try:
+                with open(data_file, 'r', encoding='utf-8') as f:
+                    project_data = json.load(f)
+                    # Reconstruct corpus from preprocessed data
+                    if 'preprocessed_data' in project_data:
+                        from services.preprocessing import TextPreprocessor
+                        preprocessor = TextPreprocessor()
+                        preprocessed_docs = [item['tokens'] for item in project_data['preprocessed_data']]
+                        corpus = [lda_service.dictionary.doc2bow(doc) for doc in preprocessed_docs]
+            except Exception as e:
+                print(f"Warning: Could not load corpus from project data: {e}")
+
+        # Prepare pyLDAvis data
+        pyldavis_data = lda_service.get_pyldavis_data(corpus=corpus)
+
+        if pyldavis_data is None:
+            return {
+                'success': False,
+                'message': 'Failed to prepare pyLDAvis visualization data. The model may not have been trained properly.'
+            }
+
+        return {
+            'success': True,
+            'data': pyldavis_data,
+            'project': project.to_dict(),
+            'message': f'pyLDAvis data prepared for project: {project.name}'
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error preparing pyLDAvis data: {str(e)}'
         }

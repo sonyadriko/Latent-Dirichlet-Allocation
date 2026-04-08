@@ -491,3 +491,49 @@ async def reset_pipeline(current_user: User = Depends(get_current_user)):
         'success': True,
         'message': 'Pipeline berhasil direset'
     }
+
+
+@router.get("/pyldavis")
+async def get_pyldavis():
+    """
+    Get pyLDAvis visualization data for the current KDD pipeline results.
+
+    Returns JSON data compatible with pyLDAvis JavaScript visualization.
+    """
+    try:
+        # Check if LDA model exists in service
+        if lda_service.lda_model is None:
+            return {
+                'success': False,
+                'message': 'LDA model not trained yet. Please complete the data mining step first.'
+            }
+
+        # Get corpus from state
+        transformed_data = await kdd_state_manager.get('transformed_data')
+
+        if transformed_data is None:
+            return {
+                'success': False,
+                'message': 'Transformed data not available. Please complete the transforming step first.'
+            }
+
+        # Prepare pyLDAvis data
+        pyldavis_data = lda_service.get_pyldavis_data()
+
+        if pyldavis_data is None:
+            return {
+                'success': False,
+                'message': 'Failed to prepare pyLDAvis visualization data.'
+            }
+
+        return {
+            'success': True,
+            'data': pyldavis_data,
+            'message': 'pyLDAvis data prepared successfully'
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error preparing pyLDAvis data: {str(e)}'
+        }

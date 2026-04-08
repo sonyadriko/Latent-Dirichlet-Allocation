@@ -11,6 +11,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- pyLDAvis Dependencies -->
+    <script src="/static/js/d3.v5.min.js"></script>
+    <script src="/static/js/ldavis.v3.0.0.js"></script>
     <style>
         /* Three Column Layout Styles */
         .viz-layout {
@@ -137,6 +140,46 @@
             background: var(--primary);
             color: white;
             border-color: var(--primary);
+        }
+
+        /* pyLDAvis Container Styles */
+        .pyldavis-container {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            min-height: 600px;
+        }
+
+        .pyldavis-container .error {
+            color: #ef4444;
+            padding: var(--space-4);
+            text-align: center;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: var(--radius-md);
+        }
+
+        .pyldavis-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            color: var(--text-muted);
+        }
+
+        .pyldavis-loading::before {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: var(--space-4);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         /* Main Content */
@@ -690,6 +733,7 @@
                             <div class="mode-selector">
                                 <button class="mode-btn active" id="overall-mode" onclick="showOverallView()">📊 Overall</button>
                                 <button class="mode-btn" id="topic-mode" onclick="showTopicView()">📋 By Topic</button>
+                                <button class="mode-btn" id="pyldavis-mode" onclick="showPyLDAvisView()">🎯 pyLDAvis</button>
                             </div>
                         </div>
                     </aside>
@@ -844,6 +888,17 @@
                             <!-- Will be populated dynamically based on selected topic -->
                             <div id="topic-content"></div>
                         </div>
+
+                        <!-- pyLDAvis Interactive View -->
+                        <div id="pyldavis-view" class="view-content hidden">
+                            <h2 style="margin-bottom: var(--space-4);">🎯 pyLDAvis Interactive Visualization</h2>
+                            <p style="margin-bottom: var(--space-4); color: var(--text-muted);">
+                                Interactive visualization showing topic distances and term relevance. Click on topics to explore their top terms.
+                            </p>
+                            <div class="pyldavis-container" id="pyldavis-container">
+                                <div class="pyldavis-loading">Loading visualization...</div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Right Sidebar - Topic Distribution & Prominence -->
@@ -891,6 +946,7 @@
     </div>
 
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/pyldavis.js"></script>
     <script>
         // Global variables
         let ldaData = null;
@@ -1835,25 +1891,54 @@
         function showOverallView() {
             const overallView = document.getElementById('overall-view');
             const topicView = document.getElementById('topic-view');
+            const pyldavisView = document.getElementById('pyldavis-view');
             const overallMode = document.getElementById('overall-mode');
             const topicMode = document.getElementById('topic-mode');
-            
+            const pyldavisMode = document.getElementById('pyldavis-mode');
+
             if (overallView) overallView.classList.remove('hidden');
             if (topicView) topicView.classList.add('hidden');
+            if (pyldavisView) pyldavisView.classList.add('hidden');
             if (overallMode) overallMode.classList.add('active');
             if (topicMode) topicMode.classList.remove('active');
+            if (pyldavisMode) pyldavisMode.classList.remove('active');
         }
 
         function showTopicView() {
             const overallView = document.getElementById('overall-view');
             const topicView = document.getElementById('topic-view');
+            const pyldavisView = document.getElementById('pyldavis-view');
             const overallMode = document.getElementById('overall-mode');
             const topicMode = document.getElementById('topic-mode');
-            
+            const pyldavisMode = document.getElementById('pyldavis-mode');
+
             if (overallView) overallView.classList.add('hidden');
             if (topicView) topicView.classList.remove('hidden');
+            if (pyldavisView) pyldavisView.classList.add('hidden');
             if (overallMode) overallMode.classList.remove('active');
             if (topicMode) topicMode.classList.add('active');
+            if (pyldavisMode) pyldavisMode.classList.remove('active');
+        }
+
+        function showPyLDAvisView() {
+            const overallView = document.getElementById('overall-view');
+            const topicView = document.getElementById('topic-view');
+            const pyldavisView = document.getElementById('pyldavis-view');
+            const overallMode = document.getElementById('overall-mode');
+            const topicMode = document.getElementById('topic-mode');
+            const pyldavisMode = document.getElementById('pyldavis-mode');
+
+            if (overallView) overallView.classList.add('hidden');
+            if (topicView) topicView.classList.add('hidden');
+            if (pyldavisView) pyldavisView.classList.remove('hidden');
+            if (overallMode) overallMode.classList.remove('active');
+            if (topicMode) topicMode.classList.remove('active');
+            if (pyldavisMode) pyldavisMode.classList.add('active');
+
+            // Initialize pyLDAvis if not already loaded
+            if (window.pyldavis && !window.pyldavisData) {
+                window.pyldavis.init();
+            }
         }
 
         function displayTopicSpecificContent(topicId) {

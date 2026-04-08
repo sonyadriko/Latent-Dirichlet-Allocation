@@ -354,6 +354,172 @@
             font-size: 0.875rem;
             color: var(--text-muted);
         }
+
+        /* Project Management Styles */
+        .project-management {
+            margin-top: var(--space-8);
+        }
+
+        .project-management h2 {
+            color: var(--primary);
+            margin-bottom: var(--space-4);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .projects-table {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .project-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            background: var(--bg-darker);
+            border-bottom: 2px solid var(--border-color);
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .project-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            border-bottom: 1px solid var(--border-color);
+            align-items: center;
+            transition: background var(--transition-normal);
+        }
+
+        .project-row:last-child {
+            border-bottom: none;
+        }
+
+        .project-row:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .project-name {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .project-description {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: var(--space-1);
+        }
+
+        .project-stat {
+            text-align: center;
+            padding: var(--space-2) var(--space-3);
+            background: var(--bg-darker);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+        }
+
+        .project-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .project-stat-value {
+            font-weight: 600;
+            color: var(--primary-light);
+        }
+
+        .project-status {
+            display: inline-block;
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .project-status.active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .project-status.archived {
+            background: rgba(156, 163, 175, 0.1);
+            color: var(--text-muted);
+        }
+
+        .btn-delete {
+            background: var(--error);
+            color: white;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            border: none;
+        }
+
+        .btn-delete:hover {
+            background: #dc2626;
+            transform: scale(1.05);
+        }
+
+        .btn-delete:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .projects-loading,
+        .projects-empty {
+            padding: var(--space-8);
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .btn-refresh {
+            background: var(--primary);
+            color: white;
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            border: none;
+            margin-left: auto;
+        }
+
+        .btn-refresh:hover {
+            background: var(--primary-light);
+        }
+
+        .project-header-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-4);
+        }
+
+        @media (max-width: 768px) {
+            .project-header {
+                grid-template-columns: 1fr;
+                gap: var(--space-2);
+            }
+
+            .project-row {
+                grid-template-columns: 1fr;
+                gap: var(--space-2);
+            }
+
+            .project-stat {
+                display: inline-block;
+                margin-right: var(--space-2);
+            }
+        }
     </style>
 </head>
 
@@ -668,6 +834,20 @@ https://www.cnnindonesia.com/berita-3
                     <div class="label">Coherence Score</div>
                 </div>
             </div>
+
+            <!-- Project Management Section -->
+            <section class="project-management">
+                <div class="project-header-actions">
+                    <h2>📁 Project Management</h2>
+                    <button class="btn-refresh" onclick="loadProjects()">
+                        🔄 Refresh
+                    </button>
+                </div>
+
+                <div id="projects-table" class="projects-table">
+                    <div class="projects-loading">Loading projects...</div>
+                </div>
+            </section>
 
             <!-- Action Buttons -->
             <div class="flex gap-4 mt-6" id="action-buttons">
@@ -1396,12 +1576,12 @@ https://www.cnnindonesia.com/berita-3
             if (!confirm('Apakah Anda yakin ingin mereset seluruh pipeline?')) {
                 return;
             }
-            
+
             try {
                 const response = await apiRequest('/api/kdd/reset', {
                     method: 'POST'
                 });
-                
+
                 if (response.success) {
                     alert('Pipeline berhasil direset');
                     location.reload();
@@ -1410,6 +1590,172 @@ https://www.cnnindonesia.com/berita-3
                 alert('Gagal mereset pipeline: ' + error.message);
             }
         }
+
+        // ==================== Project Management Functions ====================
+
+        // Load projects for the project management section
+        async function loadProjects() {
+            const container = document.getElementById('projects-table');
+
+            try {
+                const response = await apiRequest('/api/projects/list');
+
+                if (response.success) {
+                    renderProjectsTable(response.data);
+                } else {
+                    container.innerHTML = `<p class="projects-empty">Failed to load projects: ${response.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Failed to load projects:', error);
+                container.innerHTML = `<p class="projects-empty">Failed to load projects: ${error.message}</p>`;
+            }
+        }
+
+        // Render projects table
+        function renderProjectsTable(projects) {
+            const container = document.getElementById('projects-table');
+
+            if (!projects || projects.length === 0) {
+                container.innerHTML = '<p class="projects-empty">No projects found. Create a project to get started.</p>';
+                return;
+            }
+
+            const headerHtml = `
+                <div class="project-header">
+                    <div>Project Name</div>
+                    <div class="project-stat-label">Topics</div>
+                    <div class="project-stat-label">Documents</div>
+                    <div class="project-stat-label">Coherence</div>
+                    <div class="project-stat-label">Status</div>
+                    <div>Actions</div>
+                </div>
+            `;
+
+            const rowsHtml = projects.map(project => `
+                <div class="project-row" data-id="${project.id}">
+                    <div>
+                        <div class="project-name">${escapeHtml(project.name)}</div>
+                        ${project.description ? `<div class="project-description">${escapeHtml(project.description)}</div>` : ''}
+                    </div>
+                    <div class="project-stat">
+                        <div class="project-stat-value">${project.num_topics || 0}</div>
+                        <div class="project-stat-label">Topics</div>
+                    </div>
+                    <div class="project-stat">
+                        <div class="project-stat-value">${project.document_count || 0}</div>
+                        <div class="project-stat-label">Docs</div>
+                    </div>
+                    <div class="project-stat">
+                        <div class="project-stat-value">${(project.coherence_score || 0).toFixed(3)}</div>
+                        <div class="project-stat-label">Cv Score</div>
+                    </div>
+                    <div>
+                        <span class="project-status ${project.status || 'active'}">
+                            ${project.status || 'active'}
+                        </span>
+                    </div>
+                    <div>
+                        <button class="btn-delete" onclick="deleteProject(${project.id}, '${escapeHtml(project.name)}')">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = headerHtml + rowsHtml;
+        }
+
+        // Delete project with confirmation
+        async function deleteProject(projectId, projectName) {
+            const confirmMsg = `Are you sure you want to delete "${projectName}"?\n\nThis will delete:\n- Database records\n- Model files\n- All associated data\n\nThis action cannot be undone.`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            const container = document.getElementById('projects-table');
+            const row = container.querySelector(`.project-row[data-id="${projectId}"]`);
+            const button = row?.querySelector('.btn-delete');
+
+            // Disable button and show loading
+            if (button) {
+                button.disabled = true;
+                button.textContent = '⏳ Deleting...';
+            }
+
+            try {
+                const response = await apiRequest(`/api/projects/${projectId}/delete`, {
+                    method: 'DELETE'
+                });
+
+                if (response.success) {
+                    // Remove row from table with animation
+                    if (row) {
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateX(-20px)';
+                        setTimeout(() => {
+                            row.remove();
+                            // Check if table is empty
+                            const remainingRows = container.querySelectorAll('.project-row');
+                            if (remainingRows.length === 0) {
+                                renderProjectsTable([]);
+                            }
+                        }, 300);
+                    }
+
+                    // Show success message
+                    showAlert(`Project "${projectName}" deleted successfully`, 'success');
+                } else {
+                    throw new Error(response.message || 'Failed to delete project');
+                }
+            } catch (error) {
+                console.error('Failed to delete project:', error);
+
+                // Re-enable button
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = '🗑️ Delete';
+                }
+
+                showAlert(`Failed to delete project: ${error.message}`, 'error');
+            }
+        }
+
+        // Show alert message
+        function showAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('alert-container');
+            const alertClass = type === 'success' ? 'alert-success' :
+                              type === 'error' ? 'alert-error' : 'alert-info';
+
+            const alertHtml = `
+                <div class="alert ${alertClass}" style="animation: slideIn 0.3s ease-out;">
+                    ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
+                </div>
+            `;
+
+            alertContainer.innerHTML = alertHtml;
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                const alert = alertContainer.querySelector('.alert');
+                if (alert) {
+                    alert.style.animation = 'slideOut 0.3s ease-out';
+                    setTimeout(() => alert.remove(), 300);
+                }
+            }, 5000);
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load projects on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProjects();
+        });
     </script>
 </body>
 

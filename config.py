@@ -5,13 +5,19 @@ class Config:
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-lda-2024'
     DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
     RESULTS_DIR = os.path.join(DATA_DIR, 'results')
-    
+
+    # Database Configuration (SQLite for single-container deployment)
+    DATABASE_URL = os.environ.get(
+        'DATABASE_URL',
+        'sqlite+aiosqlite:///' + os.path.join(DATA_DIR, 'lda_app.db')
+    )
+
     # LDA Configuration
     NUM_TOPICS = 5
     NUM_WORDS_PER_TOPIC = 10
     PASSES = 15
     ITERATIONS = 100
-    
+
     # Ensure directories exist
     @staticmethod
     def init_app():

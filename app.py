@@ -10,6 +10,10 @@ from contextlib import asynccontextmanager
 from config import Config
 from routers import auth, kdd, search, project
 
+# Database and Error Handling (Phase 2 Backend Improvements)
+from core.database import init_database, close_database
+from core.error_handlers import register_error_handlers
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,27 +23,43 @@ async def lifespan(app: FastAPI):
     # Initialize directories on startup
     Config.init_app()
 
+    # Initialize database tables
+    try:
+        await init_database()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
+        print("Application will continue with limited functionality")
+
     # Print startup message
     print("=" * 50)
     print("LDA Business News Trend Application")
-    print("FastAPI Framework")
+    print("FastAPI Framework with persistent database")
     print("=" * 50)
 
     yield
 
     # Cleanup on shutdown
     print("Shutting down application...")
+    try:
+        await close_database()
+        print("Database connection closed")
+    except Exception as e:
+        print(f"Warning: Database close failed: {e}")
 
 
 # Create FastAPI application
 app = FastAPI(
     title="LDA Topic Modeling API",
     description="API untuk LDA Topic Modeling pada berita bisnis Indonesia dengan KDD Pipeline",
-    version="2.0.0",
+    version="2.1.0",  # Bumped for Phase 2 improvements
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
+# Register global error handlers
+register_error_handlers(app)
 
 # Configure CORS
 app.add_middleware(
@@ -69,12 +89,26 @@ async def health():
     """
     Health Check Endpoint
 
-    Returns the current status of the server.
+    Returns the current status of the server and database.
     """
+    from core.database import _engine
+    from sqlalchemy import text
+
+    db_status = "disconnected"
+    try:
+        if _engine:
+            async with _engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            db_status = "connected"
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "message": "Server is running",
-        "framework": "FastAPI"
+        "framework": "FastAPI",
+        "version": "2.1.0",
+        "database": db_status
     }
 
 
