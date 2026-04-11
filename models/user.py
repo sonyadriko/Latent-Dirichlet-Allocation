@@ -1,11 +1,28 @@
 import json
 import os
+import hashlib
 from passlib.context import CryptContext
 from config import Config
 
-# Password hashing context using bcrypt_sha256
-# Pre-hashes with SHA-256 to avoid bcrypt's 72-byte password limit
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+# Password hashing context using bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _pre_hash_password(password: str) -> str:
+    """Pre-hash password with SHA-256 to avoid bcrypt's 72-byte limit."""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+def hash_password(password: str) -> str:
+    """Hash password with SHA-256 + bcrypt."""
+    pre_hashed = _pre_hash_password(password)
+    return pwd_context.hash(pre_hashed)
+
+
+def verify_password(password: str, hash: str) -> bool:
+    """Verify password against hash."""
+    pre_hashed = _pre_hash_password(password)
+    return pwd_context.verify(pre_hashed, hash)
 
 
 class User:
@@ -46,7 +63,7 @@ class User:
             'id': new_id,
             'name': name,
             'email': email,
-            'password_hash': pwd_context.hash(password)
+            'password_hash': hash_password(password)
         }
 
         users.append(new_user)
@@ -71,7 +88,7 @@ class User:
         return None
 
     def check_password(self, password):
-        return pwd_context.verify(password, self.password_hash)
+        return verify_password(password, self.password_hash)
 
     def to_dict(self):
         return {
