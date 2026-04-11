@@ -1,38 +1,39 @@
 import json
 import os
-import hashlib
 from passlib.context import CryptContext
 from config import Config
 
-# Password hashing context using bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def _pre_hash_password(password: str) -> str:
-    """Pre-hash password with SHA-256 to avoid bcrypt's 72-byte limit."""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+# Password hashing using pbkdf2_sha256
+# No 72-byte limit, compatible with all passlib versions
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256"],
+    deprecated="auto",
+    pbkdf2_sha256__default_rounds=29000
+)
 
 
 def hash_password(password: str) -> str:
-    """Hash password with SHA-256 + bcrypt."""
-    pre_hashed = _pre_hash_password(password)
-    return pwd_context.hash(pre_hashed)
+    """Hash password with PBKDF2-SHA256."""
+    return pwd_context.hash(password)
 
 
-def verify_password(password: str, hash: str) -> bool:
+def verify_password(password: str, hash_value: str) -> bool:
     """Verify password against hash.
 
     Supports both:
-    - New format: bcrypt(sha256(password))
-    - Old format: bcrypt(password)
+    - New format: pbkdf2_sha256
+    - Old format: bcrypt (for existing users)
     """
-    # Try new format first (SHA-256 pre-hash + bcrypt)
-    pre_hashed = _pre_hash_password(password)
-    if pwd_context.verify(pre_hashed, hash):
-        return True
+    # Check if it's a bcrypt hash (starts with $2a$, $2b$, etc)
+    if hash_value.startswith('$2') and hash_value[3] == '$':
+        try:
+            from passlib.hash import bcrypt
+            return bcrypt.verify(password, hash_value)
+        except Exception:
+            return False
 
-    # Fallback to old format (plain bcrypt) for existing users
-    return pwd_context.verify(password, hash)
+    # Otherwise use pbkdf2_sha256
+    return pwd_context.verify(password, hash_value)
 
 
 class User:
