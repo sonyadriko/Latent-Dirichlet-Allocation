@@ -3,8 +3,9 @@ import os
 from passlib.context import CryptContext
 from config import Config
 
-# Password hashing context using bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing context using bcrypt_sha256
+# Pre-hashes with SHA-256 to avoid bcrypt's 72-byte password limit
+pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
 
 class User:
