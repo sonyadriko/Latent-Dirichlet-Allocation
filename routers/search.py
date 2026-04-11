@@ -214,14 +214,32 @@ async def train_lda_model(request: Request, current_user: User = Depends(get_cur
     num_topics = data.get('num_topics', 5)
     project_name = data.get('project_name')
     project_description = data.get('project_description', '')
+    source_urls = data.get('source_urls', [])  # New: source URLs from upload
+    crawled_documents = data.get('documents', [])  # New: crawled documents
 
-    # Load all documents
-    documents = Document.get_all_documents()
+    # Determine which documents to use
+    if crawled_documents:
+        # Use provided crawled documents (from TXT upload)
+        from models.document import Document as DocModel
+        documents = []
+        for i, doc_data in enumerate(crawled_documents):
+            doc = DocModel(
+                id=i + 1,
+                title=doc_data.get('title', 'Untitled'),
+                content=doc_data.get('content', ''),
+                category=doc_data.get('category'),
+                author=doc_data.get('author')
+            )
+            doc.url = doc_data.get('url', '')
+            documents.append(doc)
+    else:
+        # Fallback: load all documents from collection
+        documents = Document.get_all_documents()
 
     if len(documents) < num_topics:
         return {
             'success': False,
-            'message': f'Need at least {num_topics} documents to train {num_topics} topics'
+            'message': f'Need at least {num_topics} documents to train {num_topics} topics. Got {len(documents)} documents.'
         }
 
     try:
@@ -229,7 +247,8 @@ async def train_lda_model(request: Request, current_user: User = Depends(get_cur
         results = lda_service.train_on_documents(
             documents,
             num_topics=num_topics,
-            project_name=project_name if project_name else None
+            project_name=project_name if project_name else None,
+            source_urls=source_urls if source_urls else None
         )
 
         # Initialize search service after training

@@ -253,6 +253,7 @@ async def upload_and_crawl(
         await kdd_state_manager.update_status('crawling', PipelineStatus.completed)
         await kdd_state_manager.set('raw_data', crawl_results['success'])
         await kdd_state_manager.set('selected_data', crawl_results['success'])
+        await kdd_state_manager.set('source_urls', urls)  # Store source URLs
         await kdd_state_manager.update_status('selection', PipelineStatus.completed)
 
         return {
@@ -262,6 +263,8 @@ async def upload_and_crawl(
                 'total': crawl_results['total'],
                 'success_count': crawl_results['success_count'],
                 'failed_count': crawl_results['failed_count'],
+                'source_urls': urls,  # Return source URLs
+                'documents': crawl_results['success'],  # Return all crawled documents
                 'sample': crawl_results['success'][:3] if crawl_results['success'] else []
             }
         }

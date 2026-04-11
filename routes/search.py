@@ -271,36 +271,57 @@ def train_lda_model(current_user):
         num_topics = data.get('num_topics', 5)
         project_name = data.get('project_name')
         project_description = data.get('project_description', '')
-        
-        # Load all documents
-        documents = Document.get_all_documents()
-        
+        source_urls = data.get('source_urls', [])  # New: source URLs from upload
+        crawled_documents = data.get('documents', [])  # New: crawled documents
+
+        # Determine which documents to use
+        if crawled_documents:
+            # Use provided crawled documents (from TXT upload)
+            # Convert dict to Document objects
+            documents = []
+            for i, doc_data in enumerate(crawled_documents):
+                from models.document import Document as DocModel
+                doc = DocModel(
+                    id=i + 1,
+                    title=doc_data.get('title', 'Untitled'),
+                    content=doc_data.get('content', ''),
+                    category=doc_data.get('category'),
+                    author=doc_data.get('author')
+                )
+                # Add url attribute for reference
+                doc.url = doc_data.get('url', '')
+                documents.append(doc)
+        else:
+            # Fallback: load all documents from collection
+            documents = Document.get_all_documents()
+
         if len(documents) < num_topics:
             return jsonify({
                 'success': False,
-                'message': f'Need at least {num_topics} documents to train {num_topics} topics'
+                'message': f'Need at least {num_topics} documents to train {num_topics} topics. Got {len(documents)} documents.'
             }), 400
-        
+
         # Train LDA model with project saving
         results = lda_service.train_on_documents(
-            documents, 
-            num_topics=num_topics, 
-            project_name=project_name if project_name else None
+            documents,
+            num_topics=num_topics,
+            project_name=project_name if project_name else None,
+            source_urls=source_urls if source_urls else None
         )
-        
+
         # Initialize search service after training
         service = get_search_service()
-        
+
         # Add project info to response if project was created
         if project_name:
             results['project_name'] = project_name
-        
+
         return jsonify({
             'success': True,
             'data': results,
             'message': 'LDA model trained successfully'
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -421,17 +442,24 @@ def get_document_topics():
         
         doc_topics = lda_service.get_all_document_topics()
         topics = lda_service.get_topics()
-        
+
         # Convert numpy types to native Python types
         doc_topics = convert_numpy_types(doc_topics)
         topics = convert_numpy_types(topics)
-        
+
+        # Use current project's document count if available, otherwise fall back to doc_topics length
+        doc_count = len(doc_topics)
+        if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
+            # Only use current_project_doc_count if doc_topics is empty (corpus not loaded)
+            if doc_count == 0:
+                doc_count = lda_service.current_project_doc_count
+
         return jsonify({
             'success': True,
             'data': {
                 'document_topics': doc_topics,
                 'topics': topics,
-                'num_documents': len(doc_topics),
+                'num_documents': doc_count,
                 'coherence': 0.4534  # Placeholder or calculate if available
             }
         }), 200
@@ -447,20 +475,26 @@ def get_model_status():
     """Check if LDA model is trained and ready"""
     try:
         is_trained = lda_service.lda_model is not None
-        document_count = len(Document.get_all_documents())
-        
+
+        # Use current project's document count if available, otherwise fall back to total
+        if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
+            document_count = lda_service.current_project_doc_count
+        else:
+            document_count = len(Document.get_all_documents())
+
         status = {
             'model_trained': is_trained,
             'document_count': document_count,
             'num_topics': len(lda_service.get_topics()) if is_trained else 0,
-            'dictionary_size': len(lda_service.dictionary) if lda_service.dictionary else 0
+            'dictionary_size': len(lda_service.dictionary) if lda_service.dictionary else 0,
+            'current_project_id': getattr(lda_service, 'current_project_id', None)
         }
-        
+
         return jsonify({
             'success': True,
             'data': status
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'success': False,

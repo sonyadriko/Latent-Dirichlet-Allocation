@@ -5,8 +5,9 @@ from config import Config
 
 class Project:
     PROJECTS_FILE = os.path.join(Config.DATA_DIR, 'projects.json')
-    
-    def __init__(self, id, name, description, num_topics, document_count, coherence_score, created_by=None):
+
+    def __init__(self, id, name, description, num_topics, document_count, coherence_score, created_by=None,
+                 source_urls=None, documents=None):
         self.id = id
         self.name = name
         self.description = description
@@ -17,6 +18,10 @@ class Project:
         self.created_at = datetime.now().isoformat()
         self.model_path = None
         self.status = 'active'
+        # New fields for proper project tracking
+        self.source_urls = source_urls or []  # URLs that were crawled
+        self.documents = documents or []  # Actual document data (title, content, url)
+        self.training_date = datetime.now().isoformat()
     
     @staticmethod
     def _load_projects():
@@ -34,25 +39,27 @@ class Project:
             json.dump(projects, f, indent=2, ensure_ascii=False)
     
     @staticmethod
-    def create(name, description, num_topics, document_count, coherence_score, created_by=None):
+    def create(name, description, num_topics, document_count, coherence_score, created_by=None,
+               source_urls=None, documents=None):
         """Create a new project"""
         projects = Project._load_projects()
-        
+
         # Check if project name already exists
         if any(p['name'].lower() == name.lower() for p in projects):
             return None, "Project name already exists"
-        
+
         # Generate new ID
         new_id = max([p['id'] for p in projects], default=0) + 1
-        
+
         # Create new project
-        project = Project(new_id, name, description, num_topics, document_count, coherence_score, created_by)
+        project = Project(new_id, name, description, num_topics, document_count, coherence_score,
+                         created_by, source_urls, documents)
         project.model_path = f"project_{new_id}_model"
-        
+
         # Add to projects list
         projects.append(project.to_dict())
         Project._save_projects(projects)
-        
+
         return project, None
     
     @staticmethod
@@ -88,7 +95,24 @@ class Project:
                 p['status'] = 'deleted'
                 p['deleted_at'] = datetime.now().isoformat()
                 break
-        
+
+        Project._save_projects(projects)
+        return True
+
+    @staticmethod
+    def update_project_documents(project_id, source_urls, documents, num_topics, document_count, coherence_score):
+        """Update an existing project with documents and training results"""
+        projects = Project._load_projects()
+        for p in projects:
+            if p['id'] == project_id:
+                p['source_urls'] = source_urls
+                p['documents'] = documents
+                p['num_topics'] = num_topics
+                p['document_count'] = document_count
+                p['coherence_score'] = coherence_score
+                p['training_date'] = datetime.now().isoformat()
+                break
+
         Project._save_projects(projects)
         return True
     
@@ -104,7 +128,10 @@ class Project:
             'created_by': self.created_by,
             'created_at': self.created_at,
             'model_path': self.model_path,
-            'status': self.status
+            'status': self.status,
+            'source_urls': self.source_urls,
+            'documents': self.documents,
+            'training_date': self.training_date
         }
     
     @staticmethod
@@ -117,9 +144,12 @@ class Project:
             num_topics=data['num_topics'],
             document_count=data['document_count'],
             coherence_score=data['coherence_score'],
-            created_by=data.get('created_by')
+            created_by=data.get('created_by'),
+            source_urls=data.get('source_urls', []),
+            documents=data.get('documents', [])
         )
         project.created_at = data.get('created_at')
         project.model_path = data.get('model_path')
         project.status = data.get('status', 'active')
+        project.training_date = data.get('training_date', data.get('created_at'))
         return project

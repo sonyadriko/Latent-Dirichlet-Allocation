@@ -12,15 +12,19 @@ class CrawlerService:
             'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
         }
         self.timeout = 30
-    
+
     def extract_content(self, html, url):
         """Extract article content from HTML"""
         soup = BeautifulSoup(html, 'lxml')
-        
+
+        # Special handling for Gramedia.com products
+        if 'gramedia.com/products' in url:
+            return self._extract_gramedia_product(soup, url)
+
         # Remove unwanted elements
         for element in soup.find_all(['script', 'style', 'nav', 'header', 'footer', 'aside', 'iframe', 'noscript']):
             element.decompose()
-        
+
         # Try to find article title
         title = ''
         title_candidates = [
@@ -97,7 +101,57 @@ class CrawlerService:
             'date': date[:50] if date else '',
             'url': url
         }
-    
+
+    def _extract_gramedia_product(self, soup, url):
+        """Extract product data from Gramedia.com using JSON-LD"""
+        import json
+
+        title = 'Untitled'
+        content = ''
+        author = 'Gramedia'
+
+        # Try to get from JSON-LD DataFeed
+        scripts = soup.find_all('script', type='application/ld+json')
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, dict):
+                    # Check for DataFeed format (Gramedia books)
+                    if data.get('@type') == 'DataFeed' and 'dataFeedElement' in data:
+                        elements = data['dataFeedElement']
+                        if elements and len(elements) > 0:
+                            book = elements[0]
+                            title = book.get('name', title)
+                            content = book.get('description', '')
+                            if 'author' in book:
+                                author = book['author'].get('name', author) if isinstance(book['author'], dict) else author
+                            break
+
+                    # Check for @graph format (Product)
+                    elif '@graph' in data:
+                        for item in data['@graph']:
+                            if item.get('@type') == 'Product':
+                                title = item.get('name', title)
+                                content = item.get('description', '')
+                                break
+                        if content:
+                            break
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+
+        # Fallback to h1 if no title found
+        if not title or title == 'Untitled':
+            h1 = soup.find('h1')
+            if h1:
+                title = h1.get_text(strip=True)
+
+        return {
+            'title': title[:500] if title else 'Untitled',
+            'content': content,
+            'date': '',
+            'url': url
+        }
+
     def crawl_url(self, url):
         """Crawl a single URL and extract content"""
         try:

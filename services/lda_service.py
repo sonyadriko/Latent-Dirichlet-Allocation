@@ -13,6 +13,8 @@ class LDAService:
         self.lda_model = None
         self.num_topics = Config.NUM_TOPICS
         self.num_words = Config.NUM_WORDS_PER_TOPIC
+        self.current_project_id = None  # Track currently loaded project
+        self.current_project_doc_count = 0  # Track document count for current project
     
     def create_dictionary_and_corpus(self, preprocessed_docs):
         """Create dictionary and corpus from preprocessed documents"""
@@ -142,18 +144,32 @@ class LDAService:
         return distribution
     
     def save_model(self, filepath):
-        """Save LDA model and dictionary"""
+        """Save LDA model, dictionary, and corpus"""
         if self.lda_model:
             self.lda_model.save(filepath + '_model')
         if self.dictionary:
             self.dictionary.save(filepath + '_dict')
+        if self.corpus:
+            # Save corpus using corpora.MmCorpus for efficient storage
+            corpora.MmCorpus.serialize(filepath + '_mm', self.corpus)
     
     def load_model(self, filepath):
-        """Load LDA model and dictionary"""
+        """Load LDA model, dictionary, and corpus
+
+        Note: For backward compatibility, corpus loading is optional.
+        Projects trained before this fix may not have corpus files (.mm).
+        Such projects will need to be retrained to save corpus properly.
+        """
         if os.path.exists(filepath + '_model'):
             self.lda_model = LdaModel.load(filepath + '_model')
         if os.path.exists(filepath + '_dict'):
             self.dictionary = corpora.Dictionary.load(filepath + '_dict')
+        if os.path.exists(filepath + '_mm'):
+            # Load corpus from Matrix Market format
+            self.corpus = corpora.MmCorpus(filepath + '_mm')
+        else:
+            # Warning: corpus not found - visualization may show incorrect data
+            print(f"Warning: Corpus file not found for {filepath}. Retrain project to fix this.")
     
     def save_results(self, results, filepath):
         """Save results to JSON"""
@@ -188,60 +204,78 @@ class LDAService:
         
         return topic_vector
     
-    def train_on_documents(self, documents, num_topics=None, project_name=None, save_model=True):
+    def train_on_documents(self, documents, num_topics=None, project_name=None, save_model=True,
+                          source_urls=None):
         """Train LDA model on a list of document objects"""
         from services.preprocessing import TextPreprocessor
-        
+
         # Preprocess documents
         preprocessor = TextPreprocessor()
         self.preprocessor = preprocessor  # Store for later use
-        
+
         preprocessed_docs = []
         doc_contents = [doc.content for doc in documents]
-        
+
         print(f"Preprocessing {len(documents)} documents...")
         preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
-        
+
         # Create dictionary and corpus
         print("Creating dictionary and corpus...")
         self.create_dictionary_and_corpus(preprocessed_docs)
-        
+
         # Train LDA model
         actual_num_topics = num_topics or self.num_topics
         print(f"Training LDA with {actual_num_topics} topics...")
         topics = self.train_lda(num_topics=actual_num_topics)
-        
+
         # Calculate coherence
         coherence = self.calculate_coherence(preprocessed_docs)
-        
+
+        # Prepare document data for saving (minimal info)
+        documents_data = [
+            {
+                'id': doc.id if hasattr(doc, 'id') else i,
+                'title': doc.title,
+                'url': doc.url if hasattr(doc, 'url') else None,
+                'content_preview': doc.content[:200] if len(doc.content) > 200 else doc.content
+            }
+            for i, doc in enumerate(documents)
+        ]
+
         result = {
             'num_documents': len(documents),
             'dictionary_size': len(self.dictionary),
             'num_topics': len(topics),
             'coherence_score': coherence,
-            'topics': topics
+            'topics': topics,
+            'documents_data': documents_data
         }
-        
+
         # Save model if project name is provided
         if save_model and project_name:
-            model_path = self.save_project_model(project_name, coherence, len(documents), actual_num_topics)
+            model_path = self.save_project_model(
+                project_name, coherence, len(documents), actual_num_topics,
+                source_urls=source_urls or [],
+                documents_data=documents_data
+            )
             result['model_path'] = model_path
-        
+
         return result
     
-    def save_project_model(self, project_name, coherence_score, doc_count, num_topics):
+    def save_project_model(self, project_name, coherence_score, doc_count, num_topics,
+                          source_urls=None, documents_data=None):
         """Save trained model for a specific project"""
         from models.project import Project
-        
+
         # Create project folder
         project_folder = os.path.join(Config.RESULTS_DIR, project_name.replace(' ', '_').lower())
         os.makedirs(project_folder, exist_ok=True)
-        
+
         # Save model and dictionary
         model_path = os.path.join(project_folder, 'lda_model')
         self.save_model(model_path)
-        
-        # Save results
+
+        # Save results with documents info
         results_file = os.path.join(project_folder, 'results.json')
         results = {
             'project_name': project_name,
@@ -249,10 +283,23 @@ class LDAService:
             'document_count': doc_count,
             'num_topics': num_topics,
             'topics': self.get_topics(),
-            'training_date': datetime.now().isoformat()
+            'training_date': datetime.now().isoformat(),
+            'source_urls': source_urls or [],
+            'documents': documents_data or []
         }
         self.save_results(results, results_file)
-        
+
+        # Save documents data separately for easy access
+        documents_file = os.path.join(project_folder, 'documents.json')
+        with open(documents_file, 'w', encoding='utf-8') as f:
+            json.dump(documents_data or [], f, indent=2, ensure_ascii=False)
+
+        # Save source URLs separately for easy access
+        urls_file = os.path.join(project_folder, 'source_urls.txt')
+        with open(urls_file, 'w', encoding='utf-8') as f:
+            for url in source_urls or []:
+                f.write(url + '\n')
+
         # Create project record
         try:
             project, error = Project.create(
@@ -260,20 +307,23 @@ class LDAService:
                 description=f"LDA model with {num_topics} topics on {doc_count} documents",
                 num_topics=num_topics,
                 document_count=doc_count,
-                coherence_score=coherence_score
+                coherence_score=coherence_score,
+                source_urls=source_urls or [],
+                documents=documents_data or []
             )
-            
+
             if project:
                 return project.model_path
         except Exception as e:
             print(f"Error creating project record: {e}")
-        
+
         return model_path
     
     def load_project_model(self, project_id=None, project_name=None):
         """Load trained model for a specific project"""
         from models.project import Project
-        
+        from services.preprocessing import TextPreprocessor
+
         try:
             # Get project by ID or name
             if project_id:
@@ -282,21 +332,61 @@ class LDAService:
                 project = Project.get_project_by_name(project_name)
             else:
                 return False, "Project ID or name is required"
-            
+
             if not project:
                 return False, "Project not found"
-            
+
             # Build model path
             project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
             model_path = os.path.join(project_folder, 'lda_model')
-            
+
             # Load model
             if os.path.exists(model_path + '_model') and os.path.exists(model_path + '_dict'):
                 self.load_model(model_path)
+
+                # Track current project for proper document count
+                self.current_project_id = project.id
+                self.current_project_doc_count = project.document_count
+
+                # Rebuild corpus if not loaded (for backward compatibility)
+                if self.corpus is None:
+                    print(f"Rebuilding corpus for project: {project.name}")
+                    try:
+                        preprocessor = TextPreprocessor()
+                        doc_contents = []
+
+                        # Try to get documents from project metadata first
+                        if project.documents:
+                            doc_contents = [doc.get('content', '') for doc in project.documents if doc.get('content')]
+                        else:
+                            # Fallback: try to load from global documents.json
+                            documents_file = os.path.join(Config.DATA_DIR, 'documents.json')
+                            if os.path.exists(documents_file):
+                                with open(documents_file, 'r', encoding='utf-8') as f:
+                                    all_docs = json.load(f)
+                                # Use the first N documents matching the project's document count
+                                doc_contents = [doc.get('content', '') for doc in all_docs[:project.document_count] if doc.get('content')]
+                                print(f"Using {len(doc_contents)} documents from global documents.json")
+
+                        if doc_contents:
+                            # Preprocess
+                            preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
+
+                            # Rebuild corpus using existing dictionary
+                            self.corpus = [self.dictionary.doc2bow(doc) for doc in preprocessed_docs]
+
+                            # Save corpus for future use
+                            corpora.MmCorpus.serialize(model_path + '_mm', self.corpus)
+                            print(f"Corpus rebuilt ({len(self.corpus)} docs) and saved for {project.name}")
+                    except Exception as e:
+                        print(f"Warning: Could not rebuild corpus: {e}")
+                        import traceback
+                        traceback.print_exc()
+
                 return True, f"Successfully loaded project: {project.name}"
             else:
                 return False, "Model files not found for this project"
-                
+
         except Exception as e:
             return False, f"Error loading project model: {str(e)}"
     

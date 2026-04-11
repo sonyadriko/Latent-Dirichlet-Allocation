@@ -486,6 +486,7 @@ def upload_and_crawl(current_user):
         kdd_state['raw_data'] = crawl_results['success']
         kdd_state['selected_data'] = crawl_results['success']
         kdd_state['status']['selection'] = 'completed'
+        kdd_state['source_urls'] = urls  # Store source URLs
 
         return jsonify({
             'success': True,
@@ -494,6 +495,8 @@ def upload_and_crawl(current_user):
                 'total': crawl_results['total'],
                 'success_count': crawl_results['success_count'],
                 'failed_count': crawl_results['failed_count'],
+                'source_urls': urls,  # Return source URLs
+                'documents': crawl_results['success'],  # Return all crawled documents
                 'sample': crawl_results['success'][:3] if crawl_results['success'] else []
             }
         }), 200

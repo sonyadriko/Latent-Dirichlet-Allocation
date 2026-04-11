@@ -923,6 +923,7 @@
         // Global variables
         let ldaData = null;
         let charts = {};
+        // currentProjectId is already declared in pyldavis.js
 
         // Check authentication
         document.addEventListener('DOMContentLoaded', () => {
@@ -953,12 +954,17 @@
                 
                 // Check if there's an active/loaded project
                 const modelStatusResponse = await apiRequest('/api/search/model-status');
-                
+
                 if (modelStatusResponse.success && modelStatusResponse.data.model_trained) {
                     // Model is loaded, show visualization directly
                     const topicsResponse = await apiRequest('/api/search/topics');
-                    
+
                     if (topicsResponse.success && topicsResponse.data.topics && topicsResponse.data.topics.length > 0) {
+                        // Set the current project ID from backend response if available
+                        if (modelStatusResponse.data.current_project_id) {
+                            currentProjectId = modelStatusResponse.data.current_project_id;
+                        }
+
                         ldaData = topicsResponse.data;
                         initializeCharts();
                         updateStats();
@@ -1016,13 +1022,16 @@
                 return;
             }
 
+            // Store the selected project ID for display purposes
+            currentProjectId = parseInt(projectId);
+
             try {
                 // Show loading
                 document.getElementById('loading-state').classList.remove('hidden');
                 document.getElementById('no-data-state').classList.add('hidden');
                 document.getElementById('viz-content').classList.add('hidden');
                 document.getElementById('project-info-section').classList.add('hidden');
-                
+
                 // Load the project
                 const loadResponse = await apiRequest(`/api/projects/${projectId}/load`, {
                     method: 'POST'
@@ -1122,42 +1131,27 @@
         async function showProjectInfo() {
             try {
                 const projectsResponse = await apiRequest('/api/projects/');
-                const modelStatus = await apiRequest('/api/search/model-status');
-                
-                if (modelStatus.success && modelStatus.data.model_trained) {
-                    // Model is loaded, find the project info
-                    if (projectsResponse.success && projectsResponse.data.length > 0) {
-                        // Try to find a project with matching document count and topics
-                        let matchingProject = projectsResponse.data.find(p => 
-                            p.document_count === modelStatus.data.document_count && 
-                            p.num_topics === modelStatus.data.num_topics
-                        );
-                        
-                        // If no exact match, just show the first project
-                        if (!matchingProject && projectsResponse.data.length > 0) {
-                            matchingProject = projectsResponse.data[0];
-                        }
-                        
-                        if (matchingProject) {
-                            document.getElementById('current-project-name').textContent = matchingProject.name;
-                            document.getElementById('project-documents').textContent = matchingProject.document_count;
-                            document.getElementById('project-topics').textContent = matchingProject.num_topics;
-                            document.getElementById('project-coherence').textContent = matchingProject.coherence_score.toFixed(3);
-                            document.getElementById('project-description').textContent = matchingProject.description || 'LDA project visualization';
-                        } else {
-                            // Fallback to model status data (calculate approximate coherence)
-                            document.getElementById('current-project-name').textContent = 'Active Project';
-                            document.getElementById('project-documents').textContent = modelStatus.data.document_count;
-                            document.getElementById('project-topics').textContent = modelStatus.data.num_topics;
-                            
-                            // Calculate approximate coherence from topic quality
-                            const approximateCoherence = (0.4 + Math.random() * 0.1).toFixed(3);
-                            document.getElementById('project-coherence').textContent = approximateCoherence;
-                            document.getElementById('project-description').textContent = 'LDA model loaded and ready for visualization';
-                        }
+
+                if (projectsResponse.success && projectsResponse.data.length > 0 && currentProjectId) {
+                    // Use the tracked current project ID directly
+                    const matchingProject = projectsResponse.data.find(p => p.id === currentProjectId);
+
+                    if (matchingProject) {
+                        document.getElementById('current-project-name').textContent = matchingProject.name;
+                        document.getElementById('project-documents').textContent = matchingProject.document_count;
+                        document.getElementById('project-topics').textContent = matchingProject.num_topics;
+                        document.getElementById('project-coherence').textContent = matchingProject.coherence_score.toFixed(3);
+                        document.getElementById('project-description').textContent = matchingProject.description || 'LDA project visualization';
+                    } else {
+                        // Project not found in list
+                        document.getElementById('current-project-name').textContent = 'Project Not Found';
+                        document.getElementById('project-documents').textContent = '-';
+                        document.getElementById('project-topics').textContent = '-';
+                        document.getElementById('project-coherence').textContent = 'N/A';
+                        document.getElementById('project-description').textContent = 'Selected project could not be found';
                     }
                 } else {
-                    // No model loaded, show default
+                    // No project selected or no projects available
                     document.getElementById('current-project-name').textContent = 'No Active Project';
                     document.getElementById('project-documents').textContent = '0';
                     document.getElementById('project-topics').textContent = '0';
@@ -1177,6 +1171,7 @@
 
         // Switch project
         function switchProject() {
+            currentProjectId = null; // Reset the tracked project ID
             document.getElementById('loading-state').classList.add('hidden');
             document.getElementById('no-data-state').classList.remove('hidden');
             document.getElementById('viz-content').classList.add('hidden');
