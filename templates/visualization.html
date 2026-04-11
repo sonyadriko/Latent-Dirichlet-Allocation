@@ -1541,7 +1541,8 @@
 
         // Update statistics
         function updateStats() {
-            document.getElementById('stat-documents').textContent = ldaData.document_topics.length;
+            // Use num_documents from response (has fallback to project doc_count)
+            document.getElementById('stat-documents').textContent = ldaData.num_documents || ldaData.document_topics.length || 0;
             document.getElementById('stat-topics').textContent = ldaData.topics.length;
             const statCoherence = document.getElementById('stat-coherence');
             if (statCoherence) {

@@ -449,10 +449,18 @@ def get_document_topics():
 
         # Use current project's document count if available, otherwise fall back to doc_topics length
         doc_count = len(doc_topics)
+        print(f"DEBUG: doc_topics length = {doc_count}")
+        print(f"DEBUG: hasattr current_project_doc_count = {hasattr(lda_service, 'current_project_doc_count')}")
+        if hasattr(lda_service, 'current_project_doc_count'):
+            print(f"DEBUG: current_project_doc_count = {lda_service.current_project_doc_count}")
+
         if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
             # Only use current_project_doc_count if doc_topics is empty (corpus not loaded)
             if doc_count == 0:
                 doc_count = lda_service.current_project_doc_count
+                print(f"DEBUG: Using current_project_doc_count = {doc_count}")
+
+        print(f"DEBUG: Final num_documents = {doc_count}")
 
         return jsonify({
             'success': True,

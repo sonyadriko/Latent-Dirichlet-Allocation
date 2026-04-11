@@ -351,33 +351,54 @@ class LDAService:
                 # Rebuild corpus if not loaded (for backward compatibility)
                 if self.corpus is None:
                     print(f"Rebuilding corpus for project: {project.name}")
+                    print(f"  project.documents exists: {bool(project.documents)}")
+                    print(f"  project.document_count: {project.document_count}")
                     try:
                         preprocessor = TextPreprocessor()
                         doc_contents = []
 
                         # Try to get documents from project metadata first
                         if project.documents:
-                            doc_contents = [doc.get('content', '') for doc in project.documents if doc.get('content')]
+                            print(f"  Using project.documents ({len(project.documents)} items)")
+                            # Handle both 'content' and 'content_preview' fields
+                            doc_contents = [doc.get('content') or doc.get('content_preview', '') for doc in project.documents]
+                            doc_contents = [c for c in doc_contents if c]  # Filter out empty
+                            print(f"  Extracted {len(doc_contents)} contents from project.documents")
                         else:
                             # Fallback: try to load from global documents.json
+                            print(f"  project.documents is empty, trying documents.json")
                             documents_file = os.path.join(Config.DATA_DIR, 'documents.json')
+                            print(f"  documents.json path: {documents_file}")
+                            print(f"  documents.json exists: {os.path.exists(documents_file)}")
                             if os.path.exists(documents_file):
                                 with open(documents_file, 'r', encoding='utf-8') as f:
                                     all_docs = json.load(f)
+                                print(f"  Loaded {len(all_docs)} docs from documents.json")
                                 # Use the first N documents matching the project's document count
                                 doc_contents = [doc.get('content', '') for doc in all_docs[:project.document_count] if doc.get('content')]
-                                print(f"Using {len(doc_contents)} documents from global documents.json")
+                                print(f"  Using {len(doc_contents)} documents from global documents.json")
+                            else:
+                                print(f"  documents.json NOT FOUND!")
+
+                        print(f"  Final doc_contents length: {len(doc_contents)}")
 
                         if doc_contents:
+                            print(f"  Preprocessing {len(doc_contents)} documents...")
                             # Preprocess
                             preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
+                            print(f"  Preprocessed {len(preprocessed_docs)} docs")
 
                             # Rebuild corpus using existing dictionary
+                            print(f"  Building corpus with dictionary (vocab size: {len(self.dictionary)})")
                             self.corpus = [self.dictionary.doc2bow(doc) for doc in preprocessed_docs]
+                            print(f"  Corpus built: {len(self.corpus)} docs")
 
                             # Save corpus for future use
+                            print(f"  Saving corpus to {model_path}_mm")
                             corpora.MmCorpus.serialize(model_path + '_mm', self.corpus)
                             print(f"Corpus rebuilt ({len(self.corpus)} docs) and saved for {project.name}")
+                        else:
+                            print(f"ERROR: No doc_contents available!")
                     except Exception as e:
                         print(f"Warning: Could not rebuild corpus: {e}")
                         import traceback
