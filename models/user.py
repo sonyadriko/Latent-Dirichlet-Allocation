@@ -20,9 +20,19 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, hash: str) -> bool:
-    """Verify password against hash."""
+    """Verify password against hash.
+
+    Supports both:
+    - New format: bcrypt(sha256(password))
+    - Old format: bcrypt(password)
+    """
+    # Try new format first (SHA-256 pre-hash + bcrypt)
     pre_hashed = _pre_hash_password(password)
-    return pwd_context.verify(pre_hashed, hash)
+    if pwd_context.verify(pre_hashed, hash):
+        return True
+
+    # Fallback to old format (plain bcrypt) for existing users
+    return pwd_context.verify(password, hash)
 
 
 class User:
