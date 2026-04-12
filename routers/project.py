@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.project import Project
 from services.lda_service import LDAService
+from services.lda_singleton import get_lda_service
 from core.security import get_current_user
 from core.database import get_session
 from models.user import User
@@ -14,8 +15,8 @@ from core.exceptions import NotFoundException
 
 router = APIRouter()
 
-# Global LDA service instance
-lda_service = LDAService()
+# Use singleton LDA service - shared across all routers
+lda_service = get_lda_service()
 
 
 @router.get("/")

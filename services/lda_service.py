@@ -365,20 +365,35 @@ class LDAService:
                             doc_contents = [c for c in doc_contents if c]  # Filter out empty
                             print(f"  Extracted {len(doc_contents)} contents from project.documents")
                         else:
-                            # Fallback: try to load from global documents.json
-                            print(f"  project.documents is empty, trying documents.json")
-                            documents_file = os.path.join(Config.DATA_DIR, 'documents.json')
-                            print(f"  documents.json path: {documents_file}")
-                            print(f"  documents.json exists: {os.path.exists(documents_file)}")
-                            if os.path.exists(documents_file):
-                                with open(documents_file, 'r', encoding='utf-8') as f:
-                                    all_docs = json.load(f)
-                                print(f"  Loaded {len(all_docs)} docs from documents.json")
-                                # Use the first N documents matching the project's document count
-                                doc_contents = [doc.get('content', '') for doc in all_docs[:project.document_count] if doc.get('content')]
-                                print(f"  Using {len(doc_contents)} documents from global documents.json")
+                            # Fallback 1: try to load from project folder's documents.json
+                            project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
+                            project_documents_file = os.path.join(project_folder, 'documents.json')
+                            print(f"  project.documents is empty, trying project folder documents.json")
+                            print(f"  project documents.json path: {project_documents_file}")
+                            print(f"  project documents.json exists: {os.path.exists(project_documents_file)}")
+                            if os.path.exists(project_documents_file):
+                                with open(project_documents_file, 'r', encoding='utf-8') as f:
+                                    project_docs = json.load(f)
+                                print(f"  Loaded {len(project_docs)} docs from project documents.json")
+                                # Use content_preview from project documents
+                                doc_contents = [doc.get('content') or doc.get('content_preview', '') for doc in project_docs]
+                                doc_contents = [c for c in doc_contents if c]  # Filter out empty
+                                print(f"  Using {len(doc_contents)} documents from project documents.json")
                             else:
-                                print(f"  documents.json NOT FOUND!")
+                                # Fallback 2: try to load from global documents.json
+                                print(f"  project documents.json NOT FOUND, trying global documents.json")
+                                documents_file = os.path.join(Config.DATA_DIR, 'documents.json')
+                                print(f"  global documents.json path: {documents_file}")
+                                print(f"  global documents.json exists: {os.path.exists(documents_file)}")
+                                if os.path.exists(documents_file):
+                                    with open(documents_file, 'r', encoding='utf-8') as f:
+                                        all_docs = json.load(f)
+                                    print(f"  Loaded {len(all_docs)} docs from global documents.json")
+                                    # Use the first N documents matching the project's document count
+                                    doc_contents = [doc.get('content', '') for doc in all_docs[:project.document_count] if doc.get('content')]
+                                    print(f"  Using {len(doc_contents)} documents from global documents.json")
+                                else:
+                                    print(f"  global documents.json NOT FOUND!")
 
                         print(f"  Final doc_contents length: {len(doc_contents)}")
 

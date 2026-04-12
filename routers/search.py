@@ -8,6 +8,7 @@ from models.document import Document
 from models.project import Project
 from services.search_service import SearchService
 from services.lda_service import LDAService
+from services.lda_singleton import get_lda_service
 from services.online_crawler import OnlineDocumentCrawler
 from core.security import get_current_user
 from models.user import User
@@ -17,7 +18,8 @@ router = APIRouter()
 
 # Global service instances
 search_service = None
-lda_service = LDAService()
+# Use singleton LDA service - shared across all routers
+lda_service = get_lda_service()
 online_crawler = OnlineDocumentCrawler()
 
 
@@ -361,7 +363,12 @@ async def get_model_status():
     """Check if LDA model is trained and ready"""
     try:
         is_trained = lda_service.lda_model is not None
-        document_count = len(Document.get_all_documents())
+
+        # Use current project's document count if available, otherwise fall back to total
+        if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
+            document_count = lda_service.current_project_doc_count
+        else:
+            document_count = len(Document.get_all_documents())
 
         return {
             'success': True,
@@ -369,7 +376,8 @@ async def get_model_status():
                 'model_trained': is_trained,
                 'document_count': document_count,
                 'num_topics': len(lda_service.get_topics()) if is_trained else 0,
-                'dictionary_size': len(lda_service.dictionary) if lda_service.dictionary else 0
+                'dictionary_size': len(lda_service.dictionary) if lda_service.dictionary else 0,
+                'current_project_id': getattr(lda_service, 'current_project_id', None)
             }
         }
 
