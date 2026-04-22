@@ -8,8 +8,11 @@ class SearchService:
     
     def search_documents(self, query, top_k=10, similarity_threshold=0.3):
         """Search documents by title query"""
+        # Get documents from current project or global
+        documents = self.lda_service.get_documents_for_search()
+
         # Find documents matching the query using hybrid search (title + content)
-        matches_with_info = Document.search_by_title_or_content(query, threshold=75)
+        matches_with_info = self._search_by_title_or_content(documents, query, threshold=75)
         
         if not matches_with_info:
             return {
@@ -43,10 +46,16 @@ class SearchService:
         """Find documents in the same topic cluster"""
         if not self.lda_service.lda_model or not self.lda_service.corpus:
             return []
-        
-        # Get the target document's topic distribution
-        all_docs = Document.get_all_documents()
-        target_doc = Document.get_document_by_id(doc_id)
+
+        # Get documents from current project or global
+        all_docs = self.lda_service.get_documents_for_search()
+
+        # Find target document
+        target_doc = None
+        for doc in all_docs:
+            if doc.id == doc_id:
+                target_doc = doc
+                break
         
         if not target_doc:
             return []
@@ -134,13 +143,60 @@ class SearchService:
             'topic_id': int(dominant[0]),
             'probability': float(round(dominant[1], 3))
         }
-    
+
+    def _search_by_title_or_content(self, documents, query, threshold=75):
+        """Search documents by title OR content using fuzzy matching"""
+        from difflib import SequenceMatcher
+
+        query = query.lower()
+
+        results = []
+        for doc in documents:
+            title_lower = doc.title.lower()
+            content_lower = doc.content.lower()
+
+            # Priority 1: Exact substring match in title (highest priority)
+            if query in title_lower:
+                results.append((doc, 100, 'title'))
+                continue
+
+            # Priority 2: Word-level matching in title
+            query_words = query.split()
+            title_words = title_lower.split()
+
+            title_word_matches = sum(1 for qw in query_words if any(qw in tw for tw in title_words))
+            if title_word_matches > 0:
+                title_score = (title_word_matches / len(query_words)) * 95
+                if title_score >= threshold:
+                    results.append((doc, title_score, 'title'))
+                    continue
+
+            # Priority 3: Exact substring match in content (lower priority)
+            if query in content_lower:
+                results.append((doc, 70, 'content'))
+                continue
+
+            # Priority 4: Word-level matching in content
+            content_words = content_lower.split()
+            content_word_matches = sum(1 for qw in query_words if any(qw in cw for cw in content_words))
+            if content_word_matches > 0:
+                content_score = (content_word_matches / len(query_words)) * 65
+                if content_score >= threshold - 15:
+                    results.append((doc, content_score, 'content'))
+                    continue
+
+        # Sort by similarity score (highest first), then by match type (title > content)
+        results.sort(key=lambda x: (x[1], 0 if x[2] == 'title' else 1), reverse=True)
+
+        # Return documents with match info
+        return [{'doc': doc, 'score': score, 'match_type': match_type} for doc, score, match_type in results]
+
     def build_document_index(self):
         """Build topic vectors for all documents"""
         if not self.lda_service.lda_model:
             return False
-        
-        documents = Document.get_all_documents()
+
+        documents = self.lda_service.get_documents_for_search()
         
         # Preprocess all documents
         from services.preprocessing import TextPreprocessor

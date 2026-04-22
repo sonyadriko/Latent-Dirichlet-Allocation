@@ -292,8 +292,8 @@ def train_lda_model(current_user):
                 doc.url = doc_data.get('url', '')
                 documents.append(doc)
         else:
-            # Fallback: load all documents from collection
-            documents = Document.get_all_documents()
+            # Fallback: load documents from current project or global collection
+            documents = lda_service.get_documents_for_search()
 
         if len(documents) < num_topics:
             return jsonify({
@@ -410,9 +410,8 @@ def get_document_topics():
     """Get topic distribution for all documents"""
     try:
         # Check if we have loaded project data first
-        from models.document import Document
-        documents = Document.get_all_documents()
-        
+        documents = lda_service.get_documents_for_search()
+
         if not documents:
             return jsonify({
                 'success': False,
@@ -488,7 +487,7 @@ def get_model_status():
         if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
             document_count = lda_service.current_project_doc_count
         else:
-            document_count = len(Document.get_all_documents())
+            document_count = len(lda_service.get_documents_for_search())
 
         status = {
             'model_trained': is_trained,

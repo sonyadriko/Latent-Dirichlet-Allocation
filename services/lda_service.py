@@ -15,6 +15,7 @@ class LDAService:
         self.num_words = Config.NUM_WORDS_PER_TOPIC
         self.current_project_id = None  # Track currently loaded project
         self.current_project_doc_count = 0  # Track document count for current project
+        self.current_project_documents = []  # Store current project documents for search
     
     def create_dictionary_and_corpus(self, preprocessed_docs):
         """Create dictionary and corpus from preprocessed documents"""
@@ -348,6 +349,16 @@ class LDAService:
                 self.current_project_id = project.id
                 self.current_project_doc_count = project.document_count
 
+                # Store project documents for search functionality
+                self.current_project_documents = project.documents or []
+
+                # If no documents in metadata, try loading from project folder
+                if not self.current_project_documents:
+                    project_documents_file = os.path.join(project_folder, 'documents.json')
+                    if os.path.exists(project_documents_file):
+                        with open(project_documents_file, 'r', encoding='utf-8') as f:
+                            self.current_project_documents = json.load(f)
+
                 # Rebuild corpus if not loaded (for backward compatibility)
                 if self.corpus is None:
                     print(f"Rebuilding corpus for project: {project.name}")
@@ -441,6 +452,24 @@ class LDAService:
         """Switch to a specific project model"""
         success, message = self.load_project_model(project_id=project_id)
         return success, message
+
+    def get_documents_for_search(self):
+        """Get documents for search -优先使用当前项目文档"""
+        if self.current_project_documents:
+            from models.document import Document
+            return [
+                Document(
+                    id=doc.get('id', i),
+                    title=doc.get('title', 'Untitled'),
+                    content=doc.get('content') or doc.get('content_preview', ''),
+                    category=doc.get('category'),
+                    author=doc.get('author')
+                )
+                for i, doc in enumerate(self.current_project_documents)
+            ]
+        # Fallback to global documents
+        from models.document import Document
+        return Document.get_all_documents()
 
     def get_pyldavis_data(self, corpus=None, sort_topics=True):
         """
