@@ -33,6 +33,23 @@
                         <div class="projects-loading">Memuat projects...</div>
                     </div>
                 </div>
+
+                <!-- Documents Modal -->
+                <div id="documents-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 id="modal-project-name">📄 Dokumen Project</h2>
+                            <button class="modal-close" onclick="closeDocumentsModal()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="documents-loading" class="documents-loading">Memuat dokumen...</div>
+                            <div id="documents-list" class="documents-list"></div>
+                            <div id="documents-empty" class="documents-empty" style="display: none;">
+                                Belum ada dokumen dalam project ini.
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -116,7 +133,10 @@
                             ${project.status || 'active'}
                         </span>
                     </div>
-                    <div>
+                    <div class="project-actions">
+                        <button class="btn-view-docs" onclick="viewDocuments(${project.id}, '${escapeHtml(project.name)}')">
+                            📄 Dokumen
+                        </button>
                         <button class="btn-delete" onclick="deleteProject(${project.id}, '${escapeHtml(project.name)}')">
                             🗑️ Hapus
                         </button>
@@ -125,6 +145,101 @@
             `).join('');
 
             container.innerHTML = headerHtml + rowsHtml;
+        }
+
+        // View documents for a project
+        async function viewDocuments(projectId, projectName) {
+            const modal = document.getElementById('documents-modal');
+            const documentsList = document.getElementById('documents-list');
+            const documentsLoading = document.getElementById('documents-loading');
+            const documentsEmpty = document.getElementById('documents-empty');
+            const modalProjectName = document.getElementById('modal-project-name');
+
+            // Show modal
+            modal.style.display = 'block';
+            modalProjectName.textContent = `📄 Dokumen: ${projectName}`;
+
+            // Reset state
+            documentsList.innerHTML = '';
+            documentsEmpty.style.display = 'none';
+            documentsLoading.style.display = 'block';
+
+            try {
+                const response = await apiRequest(`/api/projects/${projectId}/documents`);
+
+                documentsLoading.style.display = 'none';
+
+                if (response.success && response.data) {
+                    const documents = response.data.documents || [];
+
+                    if (documents.length === 0) {
+                        documentsEmpty.style.display = 'block';
+                    } else {
+                        renderDocuments(documents);
+                    }
+                } else {
+                    documentsList.innerHTML = `
+                        <div class="documents-error">
+                            <p>Gagal memuat dokumen: ${escapeHtml(response.message || 'Unknown error')}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                documentsLoading.style.display = 'none';
+                documentsList.innerHTML = `
+                    <div class="documents-error">
+                        <p>Error: ${escapeHtml(error.message)}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Render documents list
+        function renderDocuments(documents) {
+            const documentsList = document.getElementById('documents-list');
+
+            const headerHtml = `
+                <div class="document-header">
+                    <div style="width: 50px;">No</div>
+                    <div style="flex: 1;">Judul & Preview</div>
+                    <div style="width: 80px;">Tokens</div>
+                    <div style="width: 80px;">URL</div>
+                </div>
+            `;
+
+            const rowsHtml = documents.map((doc, index) => `
+                <div class="document-row">
+                    <div class="document-number">${index + 1}</div>
+                    <div class="document-content">
+                        <div class="document-title">${escapeHtml(doc.title || 'No title')}</div>
+                        ${doc.content_preview ? `<div class="document-preview">${escapeHtml(doc.content_preview)}</div>` : ''}
+                    </div>
+                    <div class="document-tokens">
+                        ${doc.tokens_count || (doc.tokens && doc.tokens.length) || 0}
+                    </div>
+                    <div class="document-url-cell">
+                        ${doc.url
+                            ? `<a href="${escapeHtml(doc.url)}" target="_blank" class="document-url">🔗 Link</a>`
+                            : '-'}
+                    </div>
+                </div>
+            `).join('');
+
+            documentsList.innerHTML = headerHtml + rowsHtml;
+        }
+
+        // Close documents modal
+        function closeDocumentsModal() {
+            const modal = document.getElementById('documents-modal');
+            modal.style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('documents-modal');
+            if (event.target === modal) {
+                closeDocumentsModal();
+            }
         }
 
         // Delete project with confirmation
@@ -240,7 +355,7 @@
 
         .project-header {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 100px;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 140px;
             gap: var(--space-4);
             padding: var(--space-4);
             background: var(--bg-card);
@@ -251,7 +366,7 @@
 
         .project-row {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 100px;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 140px;
             gap: var(--space-4);
             padding: var(--space-4);
             border-bottom: 1px solid var(--border-color);
@@ -346,6 +461,264 @@
             background: var(--primary-dark);
         }
 
+        .btn-view-docs {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            border: 1px solid #3b82f6;
+            padding: var(--space-2) var(--space-4);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 500;
+            transition: all var(--transition-normal);
+            font-size: 0.875rem;
+        }
+
+        .btn-view-docs:hover {
+            background: #3b82f6;
+            color: white;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.85);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: var(--bg-card);
+            margin: 5% auto;
+            padding: 0;
+            border-radius: var(--radius-lg);
+            width: 90%;
+            max-width: 1200px;
+            max-height: 80vh;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-6);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: var(--primary);
+            font-size: 1.5rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-md);
+            transition: all var(--transition-normal);
+        }
+
+        .modal-close:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: var(--space-6);
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .documents-loading,
+        .documents-empty,
+        .documents-error {
+            text-align: center;
+            padding: var(--space-8);
+            color: var(--text-muted);
+        }
+
+        .documents-error {
+            color: var(--error);
+        }
+
+        .document-header {
+            display: flex;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            color: var(--text-secondary);
+            position: sticky;
+            top: 0;
+            align-items: center;
+        }
+
+        .document-row {
+            display: flex;
+            gap: var(--space-4);
+            padding: var(--space-4);
+            border-bottom: 1px solid var(--border-color);
+            align-items: start;
+            transition: all var(--transition-normal);
+        }
+
+        .document-row:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .document-row:last-child {
+            border-bottom: none;
+        }
+
+        .document-title {
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: var(--space-1);
+        }
+
+        .document-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .document-preview {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .document-tokens {
+            width: 80px;
+            text-align: center;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .document-url-cell {
+            width: 80px;
+            text-align: center;
+        }
+
+        .document-number {
+            font-weight: 600;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .topic-badge {
+            display: inline-block;
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--radius-full);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .topic-badge.topic-none {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+        }
+
+        .topic-badge.topic-0 {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .topic-badge.topic-1 {
+            background: rgba(249, 115, 22, 0.1);
+            color: #f97316;
+        }
+
+        .topic-badge.topic-2 {
+            background: rgba(234, 179, 8, 0.1);
+            color: #eab308;
+        }
+
+        .topic-badge.topic-3 {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+        }
+
+        .topic-badge.topic-4 {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .topic-badge.topic-5 {
+            background: rgba(168, 85, 247, 0.1);
+            color: #a855f7;
+        }
+
+        .topic-badge.topic-6 {
+            background: rgba(236, 72, 153, 0.1);
+            color: #ec4899;
+        }
+
+        .topic-badge.topic-7 {
+            background: rgba(20, 184, 166, 0.1);
+            color: #14b8a6;
+        }
+
+        .topic-badge.topic-8 {
+            background: rgba(100, 116, 139, 0.1);
+            color: #64748b;
+        }
+
+        .topic-badge.topic-9 {
+            background: rgba(139, 92, 246, 0.1);
+            color: #8b5cf6;
+        }
+
+        .document-url {
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+
+        .document-url:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 768px) {
             .project-header,
             .project-row {
@@ -362,6 +735,39 @@
                 border-radius: var(--radius-md);
                 padding: var(--space-4);
                 margin-bottom: var(--space-3);
+            }
+
+            .document-header,
+            .document-row {
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+
+            .document-header {
+                display: none;
+            }
+
+            .document-row {
+                border: 1px solid var(--border-color);
+                border-radius: var(--radius-md);
+                padding: var(--space-4);
+                margin-bottom: var(--space-3);
+            }
+
+            .document-number {
+                display: none;
+            }
+
+            .document-tokens,
+            .document-url-cell {
+                width: 100%;
+                text-align: left;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 2% auto;
+                max-height: 90vh;
             }
         }
     </style>

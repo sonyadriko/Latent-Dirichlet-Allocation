@@ -238,7 +238,7 @@ class LDAService:
                 'id': doc.id if hasattr(doc, 'id') else i,
                 'title': doc.title,
                 'url': doc.url if hasattr(doc, 'url') else None,
-                'content_preview': doc.content[:200] if len(doc.content) > 200 else doc.content
+                'content_preview': doc.content[:1000] if len(doc.content) > 1000 else doc.content
             }
             for i, doc in enumerate(documents)
         ]

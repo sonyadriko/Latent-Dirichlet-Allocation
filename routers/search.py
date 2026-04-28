@@ -234,6 +234,20 @@ async def train_lda_model(request: Request, current_user: User = Depends(get_cur
             )
             doc.url = doc_data.get('url', '')
             documents.append(doc)
+    elif hasattr(lda_service, 'current_project_documents') and lda_service.current_project_documents:
+        # Use current project documents if available (for retraining existing projects)
+        from models.document import Document as DocModel
+        documents = []
+        for i, doc_data in enumerate(lda_service.current_project_documents):
+            doc = DocModel(
+                id=doc_data.get('id', i + 1),
+                title=doc_data.get('title', 'Untitled'),
+                content=doc_data.get('content') or doc_data.get('content_preview', ''),
+                category=doc_data.get('category'),
+                author=doc_data.get('author')
+            )
+            doc.url = doc_data.get('url', '')
+            documents.append(doc)
     else:
         # Fallback: load all documents from collection
         documents = Document.get_all_documents()
@@ -304,16 +318,7 @@ async def find_similar_documents(
 async def get_document_topics():
     """Get topic distribution for all documents"""
     try:
-        # Check if we have documents
-        documents = Document.get_all_documents()
-
-        if not documents:
-            return {
-                'success': False,
-                'message': 'No documents found. Please add documents and train a model first.'
-            }
-
-        # Check if model is trained
+        # Check if model is trained first (before checking global documents)
         if not lda_service.lda_model:
             # Try to load from existing project
             projects = Project.get_all_projects()
@@ -326,12 +331,44 @@ async def get_document_topics():
 
             # Load the most recent project
             latest_project = max(projects, key=lambda p: p.created_at)
+            print(f"Auto-loading most recent project: {latest_project.name} (ID: {latest_project.id})")
             success, message = lda_service.load_project_model(project_id=latest_project.id)
 
             if not success:
                 return {
                     'success': False,
                     'message': f'Failed to load model: {message}'
+                }
+            print(f"Project loaded successfully: {message}")
+
+        # Check if corpus exists (required for getting document topics)
+        if lda_service.corpus is None:
+            # Try to rebuild corpus from current project documents
+            print("Corpus is None, attempting to rebuild...")
+            if hasattr(lda_service, 'current_project_documents') and lda_service.current_project_documents:
+                print(f"Found {len(lda_service.current_project_documents)} project documents, rebuilding corpus...")
+                from services.preprocessing import TextPreprocessor
+
+                preprocessor = TextPreprocessor()
+                doc_contents = []
+                for doc in lda_service.current_project_documents:
+                    content = doc.get('content') or doc.get('content_preview', '')
+                    if content:
+                        doc_contents.append(content)
+
+                if doc_contents and lda_service.dictionary:
+                    preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
+                    lda_service.corpus = [lda_service.dictionary.doc2bow(doc) for doc in preprocessed_docs]
+                    print(f"Corpus rebuilt with {len(lda_service.corpus)} documents")
+                else:
+                    return {
+                        'success': False,
+                        'message': 'Cannot rebuild corpus: no documents or dictionary available'
+                    }
+            else:
+                return {
+                    'success': False,
+                    'message': 'Model corpus not available and no project documents to rebuild from. Please retrain the project.'
                 }
 
         doc_topics = lda_service.get_all_document_topics()
@@ -341,12 +378,17 @@ async def get_document_topics():
         doc_topics = convert_numpy_types(doc_topics)
         topics = convert_numpy_types(topics)
 
+        # Use current project's document count if available
+        num_documents = len(doc_topics)
+        if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
+            num_documents = lda_service.current_project_doc_count
+
         return {
             'success': True,
             'data': {
                 'document_topics': doc_topics,
                 'topics': topics,
-                'num_documents': len(doc_topics),
+                'num_documents': num_documents,
                 'coherence': 0.4534
             }
         }
@@ -363,6 +405,17 @@ async def get_model_status():
     """Check if LDA model is trained and ready"""
     try:
         is_trained = lda_service.lda_model is not None
+
+        # Auto-load most recent project if model is not trained
+        if not is_trained:
+            projects = Project.get_all_projects()
+            if projects:
+                latest_project = max(projects, key=lambda p: p.created_at)
+                print(f"Auto-loading project in model-status: {latest_project.name}")
+                success, message = lda_service.load_project_model(project_id=latest_project.id)
+                if success:
+                    is_trained = True
+                    print(f"Project loaded: {message}")
 
         # Use current project's document count if available, otherwise fall back to total
         if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:

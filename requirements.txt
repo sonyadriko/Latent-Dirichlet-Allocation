@@ -18,6 +18,7 @@ alembic==1.13.1
 # Data validation (NEW for Phase 2)
 pydantic==2.5.3
 pydantic-settings==2.1.0
+email-validator==2.3.0
 
 # Data processing and NLP (existing)
 gensim>=4.3.3

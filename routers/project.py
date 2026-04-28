@@ -289,6 +289,65 @@ async def get_project_stats():
         }
 
 
+@router.get("/{project_id}/documents")
+async def get_project_documents(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Get documents for a specific project"""
+    from repositories.project_repository import ProjectRepository
+    from repositories.document_repository import DocumentRepository
+
+    try:
+        # Try to get project from JSON file first (legacy)
+        project = Project.get_project_by_id(project_id)
+
+        if project:
+            # Get documents from project JSON (stored in project.documents)
+            documents_data = project.documents or []
+
+            return {
+                'success': True,
+                'data': {
+                    'project': project.to_dict(),
+                    'documents': documents_data,
+                    'total': len(documents_data)
+                },
+                'message': f'Found {len(documents_data)} documents for project: {project.name}'
+            }
+
+        # If not found in JSON, try database
+        db_project = await ProjectRepository.get_by_id(session, project_id)
+        if not db_project:
+            return {
+                'success': False,
+                'message': f'Project with ID {project_id} not found'
+            }
+
+        # Get documents from database
+        documents = await DocumentRepository.list_documents(
+            session,
+            project_id=project_id,
+            limit=1000
+        )
+
+        return {
+            'success': True,
+            'data': {
+                'project': db_project.to_dict(),
+                'documents': [doc.to_dict() for doc in documents],
+                'total': len(documents)
+            },
+            'message': f'Found {len(documents)} documents for project: {db_project.name}'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error getting documents: {str(e)}'
+        }
+
+
 @router.get("/{project_id}/pyldavis")
 async def get_project_pyldavis(project_id: int):
     """

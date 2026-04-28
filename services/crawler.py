@@ -103,47 +103,90 @@ class CrawlerService:
         }
 
     def _extract_gramedia_product(self, soup, url):
-        """Extract product data from Gramedia.com using JSON-LD"""
+        """Extract product data from Gramedia.com"""
         import json
 
         title = 'Untitled'
         content = ''
         author = 'Gramedia'
 
-        # Try to get from JSON-LD DataFeed
-        scripts = soup.find_all('script', type='application/ld+json')
-        for script in scripts:
-            try:
-                data = json.loads(script.string)
-                if isinstance(data, dict):
-                    # Check for DataFeed format (Gramedia books)
-                    if data.get('@type') == 'DataFeed' and 'dataFeedElement' in data:
-                        elements = data['dataFeedElement']
-                        if elements and len(elements) > 0:
-                            book = elements[0]
-                            title = book.get('name', title)
-                            content = book.get('description', '')
-                            if 'author' in book:
-                                author = book['author'].get('name', author) if isinstance(book['author'], dict) else author
-                            break
+        # First try: Extract full description from HTML/JSON embedded in page
+        # Gramedia stores the full description in JSON format in script tags
+        html_text = str(soup)
 
-                    # Check for @graph format (Product)
-                    elif '@graph' in data:
-                        for item in data['@graph']:
-                            if item.get('@type') == 'Product':
-                                title = item.get('name', title)
-                                content = item.get('description', '')
-                                break
-                        if content:
-                            break
-            except (json.JSONDecodeError, KeyError, TypeError):
-                continue
+        # Try to find long description in JSON format (new method)
+        import re
+        desc_matches = re.findall(r'"description"\s*:\s*"((?:[^"\\]|\\.)*)"', html_text)
 
-        # Fallback to h1 if no title found
+        # Find the longest description (which is likely the full synopsis)
+        for desc in desc_matches:
+            # Clean up escaped characters
+            clean_desc = desc.replace('\\n', '\n').replace('\\"', '"').replace('\\/', '/')
+
+            # Skip short descriptions or promo text
+            if len(clean_desc) > 200 and 'Promo' not in clean_desc and 'gratis' not in clean_desc.lower():
+                # Check if it looks like a synopsis (has proper sentence structure)
+                if '.' in clean_desc and ',' in clean_desc:
+                    content = clean_desc
+                    break
+
+        # Second try: Get description from meta tag
+        if not content or len(content) < 200:
+            meta_desc = soup.find('meta', {'name': 'description'})
+            if meta_desc:
+                content = meta_desc.get('content', '')
+
+        # Third try: OpenGraph description
+        if not content or len(content) < 200:
+            og_desc = soup.find('meta', {'property': 'og:description'})
+            if og_desc:
+                content = og_desc.get('content', '')
+
+        # Get title from h1 or meta
+        h1 = soup.find('h1')
+        if h1:
+            title = h1.get_text(strip=True)
+
         if not title or title == 'Untitled':
-            h1 = soup.find('h1')
-            if h1:
-                title = h1.get_text(strip=True)
+            meta_title = soup.find('meta', {'property': 'og:title'})
+            if meta_title:
+                title = meta_title.get('content', 'Untitled')
+
+        # Last resort: Try JSON-LD
+        if not content or len(content) < 100:
+            scripts = soup.find_all('script', type='application/ld+json')
+            for script in scripts:
+                try:
+                    data = json.loads(script.string)
+                    if isinstance(data, dict):
+                        # Check for DataFeed format (Gramedia books)
+                        if data.get('@type') == 'DataFeed' and 'dataFeedElement' in data:
+                            elements = data['dataFeedElement']
+                            if elements and len(elements) > 0:
+                                book = elements[0]
+                                if not title or title == 'Untitled':
+                                    title = book.get('name', title)
+                                desc = book.get('description', '')
+                                if desc and len(desc) > len(content):
+                                    content = desc
+                                if 'author' in book:
+                                    author = book['author'].get('name', author) if isinstance(book['author'], dict) else author
+                                break
+
+                        # Check for @graph format (Product)
+                        elif '@graph' in data:
+                            for item in data['@graph']:
+                                if item.get('@type') == 'Product':
+                                    if not title or title == 'Untitled':
+                                        title = item.get('name', title)
+                                    desc = item.get('description', '')
+                                    if desc and len(desc) > len(content):
+                                        content = desc
+                                    break
+                            if content:
+                                break
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    continue
 
         return {
             'title': title[:500] if title else 'Untitled',
