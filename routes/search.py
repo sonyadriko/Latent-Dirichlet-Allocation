@@ -1,10 +1,35 @@
-from flask import Blueprint, request, jsonify
+"""
+Search router for FastAPI
+Handles document search, similarity, and LDA training
+"""
+from typing import Optional
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
 from models.document import Document
+from models.project import Project
 from services.search_service import SearchService
 from services.lda_service import LDAService
+from services.lda_singleton import get_lda_service
 from services.online_crawler import OnlineDocumentCrawler
-from routes.auth import token_required
+from core.security import get_current_user
+from models.user import User
 import numpy as np
+
+router = APIRouter()
+
+# Global service instances
+search_service = None
+# Use singleton LDA service - shared across all routers
+lda_service = get_lda_service()
+online_crawler = OnlineDocumentCrawler()
+
+
+def get_search_service():
+    """Initialize or get search service instance"""
+    global search_service
+    if search_service is None:
+        search_service = SearchService(lda_service)
+    return search_service
+
 
 def convert_numpy_types(obj):
     """Convert numpy types to native Python types for JSON serialization"""
@@ -23,152 +48,75 @@ def convert_numpy_types(obj):
     else:
         return obj
 
-search_bp = Blueprint('search', __name__)
 
-# Global service instances
-search_service = None
-lda_service = LDAService()
-online_crawler = OnlineDocumentCrawler()
+@router.get("/documents")
+async def search_documents(
+    query: str = Query(...),
+    online: bool = Query(default=True),
+    top_k: int = Query(default=10),
+    threshold: float = Query(default=0.3)
+):
+    """Search documents by query"""
+    if not query:
+        return {
+            'success': False,
+            'message': 'Search query is required'
+        }
 
-def get_search_service():
-    """Initialize or get search service instance"""
-    global search_service
-    if search_service is None:
-        search_service = SearchService(lda_service)
-    return search_service
-
-@search_bp.route('/documents', methods=['GET'])
-def search_documents():
-    """
-    Search Documents by Query
-    ---
-    tags:
-      - Search
-    parameters:
-      - in: query
-        name: query
-        type: string
-        required: true
-        description: Query untuk mencari dokumen berdasarkan title dan content
-        example: ekonomi indonesia
-      - in: query
-        name: online
-        type: boolean
-        default: true
-        description: Include online search results
-      - in: query
-        name: top_k
-        type: integer
-        default: 10
-        description: Jumlah hasil similar documents
-      - in: query
-        name: threshold
-        type: number
-        default: 0.3
-        description: Minimum similarity threshold (0-1)
-    responses:
-      200:
-        description: Search results with similar documents
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            data:
-              type: object
-              properties:
-                query:
-                  type: string
-                  example: ekonomi indonesia
-                matches:
-                  type: array
-                  items:
-                    type: object
-                best_match:
-                  type: object
-                similar_documents:
-                  type: array
-                  description: Dokumen dengan topik serupa
-                  items:
-                    type: object
-                online_documents:
-                  type: array
-                  description: Hasil pencarian online
-                online_count:
-                  type: integer
-                  example: 5
-      400:
-        description: Query parameter diperlukan
-      500:
-        description: Server error
-    """
     try:
-        query = request.args.get('query', '').strip()
-        include_online = request.args.get('online', 'true').lower() == 'true'
-        top_k = request.args.get('top_k', 10, type=int)
-        threshold = request.args.get('threshold', 0.3, type=float)
-        
-        if not query:
-            return jsonify({
-                'success': False,
-                'message': 'Search query is required'
-            }), 400
-        
-        # Search local documents first
+        # Search local documents
         service = get_search_service()
         results = service.search_documents(query, top_k=top_k, similarity_threshold=threshold)
-        
+
         # Search online if requested
-        if include_online:
+        if online:
             online_results = online_crawler.search_online_documents(query, max_results=top_k)
-            
-            # Add online results to the data
+
             results['online_documents'] = online_results
             results['online_count'] = len(online_results)
-            
-            # Also try to find online documents locally first
+
+            # Try to find online documents locally
             online_local_matches = []
             for online_doc in online_results:
                 local_matches = Document.search_by_title(online_doc['title'])
                 if local_matches:
                     online_local_matches.extend([doc.to_dict() for doc in local_matches])
-            
+
             if online_local_matches:
                 results['online_local_matches'] = online_local_matches
         else:
             results['online_documents'] = []
             results['online_count'] = 0
-        
-        return jsonify({
+
+        return {
             'success': True,
             'data': results,
-            'message': results['message']
-        }), 200
-        
+            'message': results.get('message', 'Search completed')
+        }
+
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error searching documents: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/online', methods=['GET'])
-def search_online_only():
+
+@router.get("/online")
+async def search_online_only(
+    query: str = Query(...),
+    max_results: int = Query(default=10)
+):
     """Search only online documents"""
+    if not query:
+        return {
+            'success': False,
+            'message': 'Search query is required'
+        }
+
     try:
-        query = request.args.get('query', '').strip()
-        max_results = request.args.get('max_results', 10, type=int)
-        
-        if not query:
-            return jsonify({
-                'success': False,
-                'message': 'Search query is required'
-            }), 400
-        
-        # Search online sources
         online_results = online_crawler.search_online_documents(query, max_results)
-        
-        return jsonify({
+
+        return {
             'success': True,
             'data': {
                 'query': query,
@@ -176,131 +124,141 @@ def search_online_only():
                 'count': len(online_results)
             },
             'message': f'Found {len(online_results)} online documents'
-        }), 200
-        
+        }
+
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error searching online documents: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/crawl-url', methods=['POST'])
-@token_required
-def crawl_specific_url(current_user):
+
+@router.post("/crawl-url")
+async def crawl_specific_url(request: Request, current_user: User = Depends(get_current_user)):
     """Crawl content from specific URL"""
+    data = await request.json()
+    url = data.get('url', '').strip()
+
+    if not url:
+        return {
+            'success': False,
+            'message': 'URL is required'
+        }
+
     try:
-        data = request.get_json()
-        url = data.get('url', '').strip()
-        
-        if not url:
-            return jsonify({
-                'success': False,
-                'message': 'URL is required'
-            }), 400
-        
-        # Crawl the URL
         content = online_crawler.crawl_specific_url(url)
-        
+
         if not content:
-            return jsonify({
+            return {
                 'success': False,
                 'message': 'Failed to crawl URL or extract content'
-            }), 400
-        
-        return jsonify({
+            }
+
+        return {
             'success': True,
             'data': content,
             'message': 'URL crawled successfully'
-        }), 200
-        
+        }
+
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error crawling URL: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/add-online', methods=['POST'])
-@token_required
-def add_online_documents(current_user):
+
+@router.post("/add-online")
+async def add_online_documents(request: Request, current_user: User = Depends(get_current_user)):
     """Add online documents to local collection"""
+    data = await request.json()
+    query = data.get('query', '').strip()
+    max_results = data.get('max_results', 10)
+
     try:
-        data = request.get_json()
-        query = data.get('query', '').strip()
-        max_results = data.get('max_results', 10)
-        
-        # Convert max_results to int if it's a string
-        try:
-            max_results = int(max_results) if max_results else 10
-        except (ValueError, TypeError):
-            max_results = 10
-        
-        if not query:
-            return jsonify({
-                'success': False,
-                'message': 'Search query is required'
-            }), 400
-        
+        max_results = int(max_results) if max_results else 10
+    except (ValueError, TypeError):
+        max_results = 10
+
+    if not query:
+        return {
+            'success': False,
+            'message': 'Search query is required'
+        }
+
+    try:
         # Search online documents
         online_results = online_crawler.search_online_documents(query, max_results)
-        
+
         # Add to local collection
         added_count = online_crawler.add_online_documents_to_collection(online_results)
-        
-        return jsonify({
+
+        return {
             'success': True,
             'data': {
                 'online_found': len(online_results),
                 'added_count': added_count,
-                'documents': online_results[:added_count]  # Show first few added documents
+                'documents': online_results[:added_count]
             },
             'message': f'Added {added_count} new documents to collection'
-        }), 200
-        
+        }
+
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error adding online documents: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/train', methods=['POST'])
-@token_required
-def train_lda_model(current_user):
+
+@router.post("/train")
+async def train_lda_model(request: Request, current_user: User = Depends(get_current_user)):
     """Train LDA model on documents"""
+    data = await request.json()
+    num_topics = data.get('num_topics', 5)
+    project_name = data.get('project_name')
+    project_description = data.get('project_description', '')
+    source_urls = data.get('source_urls', [])  # New: source URLs from upload
+    crawled_documents = data.get('documents', [])  # New: crawled documents
+
+    # Determine which documents to use
+    if crawled_documents:
+        # Use provided crawled documents (from TXT upload)
+        from models.document import Document as DocModel
+        documents = []
+        for i, doc_data in enumerate(crawled_documents):
+            doc = DocModel(
+                id=i + 1,
+                title=doc_data.get('title', 'Untitled'),
+                content=doc_data.get('content', ''),
+                category=doc_data.get('category'),
+                author=doc_data.get('author')
+            )
+            doc.url = doc_data.get('url', '')
+            documents.append(doc)
+    elif hasattr(lda_service, 'current_project_documents') and lda_service.current_project_documents:
+        # Use current project documents if available (for retraining existing projects)
+        from models.document import Document as DocModel
+        documents = []
+        for i, doc_data in enumerate(lda_service.current_project_documents):
+            doc = DocModel(
+                id=doc_data.get('id', i + 1),
+                title=doc_data.get('title', 'Untitled'),
+                content=doc_data.get('content') or doc_data.get('content_preview', ''),
+                category=doc_data.get('category'),
+                author=doc_data.get('author')
+            )
+            doc.url = doc_data.get('url', '')
+            documents.append(doc)
+    else:
+        # Fallback: load all documents from collection
+        documents = Document.get_all_documents()
+
+    if len(documents) < num_topics:
+        return {
+            'success': False,
+            'message': f'Need at least {num_topics} documents to train {num_topics} topics. Got {len(documents)} documents.'
+        }
+
     try:
-        data = request.get_json()
-        num_topics = data.get('num_topics', 5)
-        project_name = data.get('project_name')
-        project_description = data.get('project_description', '')
-        source_urls = data.get('source_urls', [])  # New: source URLs from upload
-        crawled_documents = data.get('documents', [])  # New: crawled documents
-
-        # Determine which documents to use
-        if crawled_documents:
-            # Use provided crawled documents (from TXT upload)
-            # Convert dict to Document objects
-            documents = []
-            for i, doc_data in enumerate(crawled_documents):
-                from models.document import Document as DocModel
-                doc = DocModel(
-                    id=i + 1,
-                    title=doc_data.get('title', 'Untitled'),
-                    content=doc_data.get('content', ''),
-                    category=doc_data.get('category'),
-                    author=doc_data.get('author')
-                )
-                # Add url attribute for reference
-                doc.url = doc_data.get('url', '')
-                documents.append(doc)
-        else:
-            # Fallback: load documents from current project or global collection
-            documents = lda_service.get_documents_for_search()
-
-        if len(documents) < num_topics:
-            return jsonify({
-                'success': False,
-                'message': f'Need at least {num_topics} documents to train {num_topics} topics. Got {len(documents)} documents.'
-            }), 400
-
         # Train LDA model with project saving
         results = lda_service.train_on_documents(
             documents,
@@ -310,135 +268,109 @@ def train_lda_model(current_user):
         )
 
         # Initialize search service after training
-        service = get_search_service()
+        get_search_service()
 
         # Add project info to response if project was created
         if project_name:
             results['project_name'] = project_name
 
-        return jsonify({
+        return {
             'success': True,
             'data': results,
             'message': 'LDA model trained successfully'
-        }), 200
+        }
 
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error training LDA model: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/similar/<int:doc_id>', methods=['GET'])
-def find_similar_documents(doc_id):
-    """
-    Find Similar Documents by Topic
-    ---
-    tags:
-      - Search
-    parameters:
-      - in: path
-        name: doc_id
-        type: integer
-        required: true
-        description: ID dokumen target
-        example: 1
-      - in: query
-        name: top_k
-        type: integer
-        default: 10
-        description: Jumlah dokumen serupa yang akan diambil
-      - in: query
-        name: threshold
-        type: number
-        default: 0.3
-        description: Minimum similarity threshold (0-1)
-    responses:
-      200:
-        description: Daftar dokumen serupa
-        schema:
-          type: object
-          properties:
-            success:
-              type: boolean
-              example: true
-            data:
-              type: object
-              properties:
-                doc_id:
-                  type: integer
-                  example: 1
-                similar_documents:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                      title:
-                        type: string
-                      similarity:
-                        type: number
-                        format: float
-                count:
-                  type: integer
-                  example: 5
-    """
+
+@router.get("/similar/{doc_id}")
+async def find_similar_documents(
+    doc_id: int,
+    top_k: int = Query(default=10),
+    threshold: float = Query(default=0.3)
+):
+    """Find similar documents by topic"""
     try:
-        top_k = request.args.get('top_k', 10, type=int)
-        threshold = request.args.get('threshold', 0.3, type=float)
-        
         service = get_search_service()
         similar_docs = service.find_similar_documents(doc_id, top_k=top_k, similarity_threshold=threshold)
-        
-        return jsonify({
+
+        return {
             'success': True,
             'data': {
                 'doc_id': doc_id,
                 'similar_documents': similar_docs,
                 'count': len(similar_docs)
             }
-        }), 200
-        
+        }
+
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error finding similar documents: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/topics', methods=['GET'])
-def get_document_topics():
+
+@router.get("/topics")
+async def get_document_topics():
     """Get topic distribution for all documents"""
     try:
-        # Check if we have loaded project data first
-        documents = lda_service.get_documents_for_search()
-
-        if not documents:
-            return jsonify({
-                'success': False,
-                'message': 'No documents found. Please add documents and train a model first.'
-            }), 400
-        
+        # Check if model is trained first (before checking global documents)
         if not lda_service.lda_model:
-            # Try to load default data from existing project if available
-            from models.project import Project
+            # Try to load from existing project
             projects = Project.get_all_projects()
-            
+
             if not projects:
-                return jsonify({
+                return {
                     'success': False,
                     'message': 'LDA model not trained yet. Please train the model first.'
-                }), 400
-            
+                }
+
             # Load the most recent project
             latest_project = max(projects, key=lambda p: p.created_at)
+            print(f"Auto-loading most recent project: {latest_project.name} (ID: {latest_project.id})")
             success, message = lda_service.load_project_model(project_id=latest_project.id)
-            
+
             if not success:
-                return jsonify({
+                return {
                     'success': False,
                     'message': f'Failed to load model: {message}'
-                }), 400
-        
+                }
+            print(f"Project loaded successfully: {message}")
+
+        # Check if corpus exists (required for getting document topics)
+        if lda_service.corpus is None:
+            # Try to rebuild corpus from current project documents
+            print("Corpus is None, attempting to rebuild...")
+            if hasattr(lda_service, 'current_project_documents') and lda_service.current_project_documents:
+                print(f"Found {len(lda_service.current_project_documents)} project documents, rebuilding corpus...")
+                from services.preprocessing import TextPreprocessor
+
+                preprocessor = TextPreprocessor()
+                doc_contents = []
+                for doc in lda_service.current_project_documents:
+                    content = doc.get('content') or doc.get('content_preview', '')
+                    if content:
+                        doc_contents.append(content)
+
+                if doc_contents and lda_service.dictionary:
+                    preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
+                    lda_service.corpus = [lda_service.dictionary.doc2bow(doc) for doc in preprocessed_docs]
+                    print(f"Corpus rebuilt with {len(lda_service.corpus)} documents")
+                else:
+                    return {
+                        'success': False,
+                        'message': 'Cannot rebuild corpus: no documents or dictionary available'
+                    }
+            else:
+                return {
+                    'success': False,
+                    'message': 'Model corpus not available and no project documents to rebuild from. Please retrain the project.'
+                }
+
         doc_topics = lda_service.get_all_document_topics()
         topics = lda_service.get_topics()
 
@@ -446,64 +378,64 @@ def get_document_topics():
         doc_topics = convert_numpy_types(doc_topics)
         topics = convert_numpy_types(topics)
 
-        # Use current project's document count if available, otherwise fall back to doc_topics length
-        doc_count = len(doc_topics)
-        print(f"DEBUG: doc_topics length = {doc_count}")
-        print(f"DEBUG: hasattr current_project_doc_count = {hasattr(lda_service, 'current_project_doc_count')}")
-        if hasattr(lda_service, 'current_project_doc_count'):
-            print(f"DEBUG: current_project_doc_count = {lda_service.current_project_doc_count}")
-
+        # Use current project's document count if available
+        num_documents = len(doc_topics)
         if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
-            # Only use current_project_doc_count if doc_topics is empty (corpus not loaded)
-            if doc_count == 0:
-                doc_count = lda_service.current_project_doc_count
-                print(f"DEBUG: Using current_project_doc_count = {doc_count}")
+            num_documents = lda_service.current_project_doc_count
 
-        print(f"DEBUG: Final num_documents = {doc_count}")
-
-        return jsonify({
+        return {
             'success': True,
             'data': {
                 'document_topics': doc_topics,
                 'topics': topics,
-                'num_documents': doc_count,
-                'coherence': 0.4534  # Placeholder or calculate if available
+                'num_documents': num_documents,
+                'coherence': 0.4534
             }
-        }), 200
-        
+        }
+
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error getting document topics: {str(e)}'
-        }), 500
+        }
 
-@search_bp.route('/model-status', methods=['GET'])
-def get_model_status():
+
+@router.get("/model-status")
+async def get_model_status():
     """Check if LDA model is trained and ready"""
     try:
         is_trained = lda_service.lda_model is not None
+
+        # Auto-load most recent project if model is not trained
+        if not is_trained:
+            projects = Project.get_all_projects()
+            if projects:
+                latest_project = max(projects, key=lambda p: p.created_at)
+                print(f"Auto-loading project in model-status: {latest_project.name}")
+                success, message = lda_service.load_project_model(project_id=latest_project.id)
+                if success:
+                    is_trained = True
+                    print(f"Project loaded: {message}")
 
         # Use current project's document count if available, otherwise fall back to total
         if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
             document_count = lda_service.current_project_doc_count
         else:
-            document_count = len(lda_service.get_documents_for_search())
+            document_count = len(Document.get_all_documents())
 
-        status = {
-            'model_trained': is_trained,
-            'document_count': document_count,
-            'num_topics': len(lda_service.get_topics()) if is_trained else 0,
-            'dictionary_size': len(lda_service.dictionary) if lda_service.dictionary else 0,
-            'current_project_id': getattr(lda_service, 'current_project_id', None)
+        return {
+            'success': True,
+            'data': {
+                'model_trained': is_trained,
+                'document_count': document_count,
+                'num_topics': len(lda_service.get_topics()) if is_trained else 0,
+                'dictionary_size': len(lda_service.dictionary) if lda_service.dictionary else 0,
+                'current_project_id': getattr(lda_service, 'current_project_id', None)
+            }
         }
 
-        return jsonify({
-            'success': True,
-            'data': status
-        }), 200
-
     except Exception as e:
-        return jsonify({
+        return {
             'success': False,
             'message': f'Error checking model status: {str(e)}'
-        }), 500
+        }
