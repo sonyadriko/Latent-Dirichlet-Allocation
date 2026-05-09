@@ -146,7 +146,7 @@ class PyLDAvisService:
             }
 
     @staticmethod
-    def get_topic_terms_data(lda_model, dictionary, num_terms=30):
+    def get_topic_terms_data(lda_model, dictionary, num_terms=30, excluded_keywords=None):
         """
         Extract topic-term data for visualization.
 
@@ -154,18 +154,31 @@ class PyLDAvisService:
             lda_model: Trained Gensim LDA model
             dictionary: Gensim dictionary
             num_terms: Number of terms per topic
+            excluded_keywords: List of keywords to exclude from results
 
         Returns:
             List of topics with their terms and weights
         """
+        if excluded_keywords is None:
+            excluded_keywords = Config.get_excluded_keywords()
+
+        # Normalize excluded keywords to lowercase for case-insensitive matching
+        excluded_set = set(kw.lower() for kw in excluded_keywords) if excluded_keywords else set()
+
         topics_data = []
 
         for topic_id in range(lda_model.num_topics):
-            # Get top terms for this topic
-            topic_terms = lda_model.show_topic(topic_id, topn=num_terms)
+            # Get more terms than needed to account for excluded ones
+            # Get extra terms so we still have enough after filtering
+            extra_terms = int(num_terms * (1 + len(excluded_set) * 0.2)) if excluded_set else num_terms
+            topic_terms = lda_model.show_topic(topic_id, topn=extra_terms)
 
             terms_data = []
             for term, weight in topic_terms:
+                # Skip excluded keywords (case-insensitive)
+                if term.lower() in excluded_set:
+                    continue
+
                 terms_data.append({
                     'term': term,
                     'weight': float(weight),
@@ -173,12 +186,18 @@ class PyLDAvisService:
                     'log_prob': float(np.log(weight))
                 })
 
+                # Stop if we have enough terms after filtering
+                if len(terms_data) >= num_terms:
+                    break
+
+            # Recalculate frequency based on filtered terms
             topics_data.append({
                 'topic_id': topic_id,
                 'topic_name': f'Topic {topic_id + 1}',
                 'terms': terms_data,
                 'frequency': sum(t['weight'] for t in terms_data),
-                'term_count': len(terms_data)
+                'term_count': len(terms_data),
+                'excluded_count': extra_terms - len(terms_data)  # Track how many were excluded
             })
 
         return topics_data

@@ -5,7 +5,7 @@ Handles crawling, preprocessing, transforming, and data mining (LDA)
 import json
 import os
 from typing import Optional
-from fastapi import APIRouter, Request, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Request, Depends, UploadFile, File, Form, Query
 from config import Config
 from services.preprocessing import TextPreprocessor
 from services.lda_service import LDAService
@@ -105,6 +105,18 @@ async def crawl(
         # ===== STEP 2: PREPROCESSING =====
         await kdd_state_manager.update_status('preprocessing', PipelineStatus.running)
         documents = [item['content'] for item in crawl_results['success']]
+
+        # Get excluded keywords for training
+        keywords_to_exclude = []
+        try:
+            excluded_keywords = await apiRequest('/api/projects/excluded-keywords')
+            if excluded_keywords.success and excluded_keywords.data.keywords:
+                keywords_to_exclude = excluded_keywords.data.keywords
+        except:
+            pass
+
+        # Create preprocessor with excluded keywords
+        preprocessor = TextPreprocessor(excluded_keywords=keywords_to_exclude)
         preprocessed = preprocessor.preprocess_documents(documents)
 
         preprocessed_data = []
@@ -291,7 +303,19 @@ async def preprocessing(current_user: User = Depends(get_current_user)):
         selected_data = await kdd_state_manager.get('selected_data')
         documents = [item['content'] for item in selected_data]
 
-        # Preprocessing
+        # Get excluded keywords for training
+        keywords_to_exclude = []
+        try:
+            excluded_keywords = await apiRequest('/api/projects/excluded-keywords')
+            if excluded_keywords.success and excluded_keywords.data.keywords:
+                keywords_to_exclude = excluded_keywords.data.keywords
+        except:
+            pass
+
+        # Create preprocessor with excluded keywords for training
+        preprocessor = TextPreprocessor(excluded_keywords=keywords_to_exclude)
+
+        # Preprocessing with excluded keywords
         preprocessed = preprocessor.preprocess_documents(documents)
 
         # Store preprocessed data with original info
@@ -312,17 +336,19 @@ async def preprocessing(current_user: User = Depends(get_current_user)):
                 'title': d['title'],
                 'original_length': len(d['original']),
                 'tokens_count': len(d['tokens']),
-                'tokens_sample': d['tokens'][:10]
+                'tokens_sample': d['tokens'][:10],
+                'excluded_keywords': keywords_to_exclude
             }
             for d in preprocessed_data[:3]
         ]
 
         return {
             'success': True,
-            'message': 'Preprocessing berhasil',
+            'message': f'Preprocessing berhasil dengan {len(keywords_to_exclude)} excluded keywords',
             'data': {
                 'total_documents': len(preprocessed_data),
-                'sample': sample
+                'sample': sample,
+                'excluded_keywords': keywords_to_exclude
             }
         }
 

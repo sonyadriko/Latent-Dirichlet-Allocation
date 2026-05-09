@@ -2,7 +2,7 @@
 Project router for FastAPI
 Handles project management for LDA models
 """
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.project import Project
@@ -12,6 +12,8 @@ from core.security import get_current_user
 from core.database import get_session
 from models.user import User
 from core.exceptions import NotFoundException
+from config import Config
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -349,16 +351,26 @@ async def get_project_documents(
 
 
 @router.get("/{project_id}/pyldavis")
-async def get_project_pyldavis(project_id: int):
+async def get_project_pyldavis(
+    project_id: int,
+    exclude_keywords: Optional[str] = None,  # Comma-separated keywords to exclude
+    current_user: User = Depends(get_current_user)
+):
     """
     Get pyLDAvis visualization data for a specific project.
 
     Args:
         project_id: ID of the project
+        exclude_keywords: Optional comma-separated keywords to exclude (e.g., "baca,buku")
 
     Returns JSON data compatible with pyLDAvis JavaScript visualization.
     """
     try:
+        # Parse exclude_keywords if provided
+        excluded_keywords = None
+        if exclude_keywords:
+            excluded_keywords = [kw.strip().lower() for kw in exclude_keywords.split(',') if kw.strip()]
+
         # Get project
         project = Project.get_project_by_id(project_id)
 
@@ -399,8 +411,14 @@ async def get_project_pyldavis(project_id: int):
             except Exception as e:
                 print(f"Warning: Could not load corpus from project data: {e}")
 
-        # Prepare pyLDAvis data
-        pyldavis_data = lda_service.get_pyldavis_data(corpus=corpus)
+        # Prepare pyLDAvis data with excluded keywords
+        from services.pyldavis_service import PyLDAvisService
+        pyldavis_data = PyLDAvisService.get_topic_terms_data(
+            lda_service.lda_model,
+            lda_service.dictionary,
+            num_terms=30,
+            excluded_keywords=excluded_keywords
+        )
 
         if pyldavis_data is None:
             return {
@@ -412,6 +430,7 @@ async def get_project_pyldavis(project_id: int):
             'success': True,
             'data': pyldavis_data,
             'project': project.to_dict(),
+            'excluded_keywords': excluded_keywords or [],
             'message': f'pyLDAvis data prepared for project: {project.name}'
         }
 
@@ -419,4 +438,90 @@ async def get_project_pyldavis(project_id: int):
         return {
             'success': False,
             'message': f'Error preparing pyLDAvis data: {str(e)}'
+        }
+
+
+# Pydantic schemas for excluded keywords
+class ExcludedKeywordsRequest(BaseModel):
+    keywords: List[str]
+    project_id: Optional[int] = None  # For future per-project exclusion
+
+
+class ExcludedKeywordsResponse(BaseModel):
+    keywords: List[str]
+    project_id: Optional[int] = None
+
+
+@router.get("/excluded-keywords")
+async def get_excluded_keywords(
+    project_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get excluded keywords for topic visualization"""
+    try:
+        # For now, return global excluded keywords
+        # In the future, can implement per-project exclusion
+        keywords = Config.get_excluded_keywords()
+
+        return {
+            'success': True,
+            'data': {
+                'keywords': keywords,
+                'project_id': project_id
+            },
+            'message': f'Found {len(keywords)} excluded keywords'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error getting excluded keywords: {str(e)}'
+        }
+
+
+@router.post("/excluded-keywords")
+async def set_excluded_keywords(
+    request: ExcludedKeywordsRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Set excluded keywords for topic visualization"""
+    try:
+        # Normalize keywords to lowercase and remove duplicates
+        normalized_keywords = list(set(kw.lower().strip() for kw in request.keywords if kw.strip()))
+
+        Config.set_excluded_keywords(normalized_keywords)
+
+        return {
+            'success': True,
+            'data': {
+                'keywords': normalized_keywords,
+                'project_id': request.project_id
+            },
+            'message': f'Set {len(normalized_keywords)} excluded keywords'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error setting excluded keywords: {str(e)}'
+        }
+
+
+@router.delete("/excluded-keywords")
+async def clear_excluded_keywords(
+    current_user: User = Depends(get_current_user)
+):
+    """Clear all excluded keywords"""
+    try:
+        Config.set_excluded_keywords([])
+
+        return {
+            'success': True,
+            'data': {
+                'keywords': []
+            },
+            'message': 'Cleared all excluded keywords'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error clearing excluded keywords: {str(e)}'
         }

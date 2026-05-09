@@ -935,7 +935,7 @@
         });
 
         // Load visualization data with project validation
-        async function loadVisualization() {
+        async function loadVisualization(refreshWithExcluded = false) {
             try {
                 // Get available projects
                 const projectsResponse = await apiRequest('/api/projects/');
@@ -957,15 +957,36 @@
 
                 if (modelStatusResponse.success && modelStatusResponse.data.model_trained) {
                     // Model is loaded, show visualization directly
-                    const topicsResponse = await apiRequest('/api/search/topics');
+                    const currentProjectId = modelStatusResponse.data.current_project_id;
 
-                    if (topicsResponse.success && topicsResponse.data.topics && topicsResponse.data.topics.length > 0) {
+                    if (!currentProjectId) {
+                        console.error('No current project ID found');
+                        return;
+                    }
+
+                    const topicsResponse = await apiRequest(`/api/projects/${currentProjectId}/pyldavis`);
+
+                    if (topicsResponse.success && topicsResponse.data && topicsResponse.data.length > 0) {
                         // Set the current project ID from backend response if available
                         if (modelStatusResponse.data.current_project_id) {
                             currentProjectId = modelStatusResponse.data.current_project_id;
                         }
 
-                        ldaData = topicsResponse.data;
+                        // Convert pyldavis format to expected ldaData format
+                        ldaData = {
+                            current_project_id: topicsResponse.data.project?.id,
+                            topics: topicsResponse.data.map(topic => ({
+                                id: topic.topic_id,
+                                name: topic.topic_name,
+                                words: topic.terms.map(term => ({
+                                    word: term.term,
+                                    weight: term.weight
+                                })),
+                                frequency: topic.frequency
+                            })),
+                            coherence: topicsResponse.data.project?.coherence_score || 0
+                        };
+
                         initializeCharts();
                         updateStats();
                         populateTopicNavigation();
@@ -1039,7 +1060,7 @@
                 
                 if (loadResponse.success) {
                     // Load topics for the loaded project
-                    const topicsResponse = await apiRequest('/api/search/topics');
+                    const topicsResponse = await apiRequest(`/api/projects/${currentProjectId}/pyldavis`);
                     
                     if (topicsResponse.success && topicsResponse.data.topics && topicsResponse.data.topics.length > 0) {
                         ldaData = topicsResponse.data;

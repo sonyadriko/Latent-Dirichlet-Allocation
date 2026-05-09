@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Pengaturan keyword yang dikecualikan dari topic modeling">
+    <title>Pengaturan - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .settings-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: var(--space-6);
+        }
+
+        .settings-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin-bottom: var(--space-6);
+        }
+
+        .settings-header {
+            margin-bottom: var(--space-6);
+        }
+
+        .settings-header h1 {
+            font-size: 2rem;
+            color: var(--primary);
+            margin-bottom: var(--space-2);
+        }
+
+        .settings-header p {
+            color: var(--text-muted);
+        }
+
+        .info-banner {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            margin-bottom: var(--space-6);
+        }
+
+        .info-banner h4 {
+            color: var(--primary);
+            margin-bottom: var(--space-2);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .keyword-input-group {
+            display: flex;
+            gap: var(--space-3);
+            margin-bottom: var(--space-4);
+        }
+
+        .keyword-input {
+            flex: 1;
+            padding: var(--space-3);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            transition: border-color var(--transition-normal);
+        }
+
+        .keyword-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .add-keyword-btn {
+            padding: var(--space-3) var(--space-5);
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .add-keyword-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .keywords-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            margin-bottom: var(--space-4);
+            min-height: 60px;
+            padding: var(--space-3);
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            border: 1px dashed var(--border-color);
+        }
+
+        .keywords-empty {
+            width: 100%;
+            text-align: center;
+            color: var(--text-muted);
+            padding: var(--space-4);
+        }
+
+        .keyword-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-3);
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .keyword-tag button {
+            background: none;
+            border: none;
+            color: var(--error);
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+            padding: 0;
+            opacity: 0.7;
+            transition: opacity var(--transition-normal);
+        }
+
+        .keyword-tag button:hover {
+            opacity: 1;
+        }
+
+        .actions {
+            display: flex;
+            gap: var(--space-3);
+            padding-top: var(--space-4);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-6);
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            padding: var(--space-4);
+            border-radius: var(--radius-md);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-top: var(--space-1);
+        }
+
+        @media (max-width: 768px) {
+            .settings-container {
+                padding: var(--space-4);
+            }
+
+            .settings-card {
+                padding: var(--space-4);
+            }
+
+            .keyword-input-group {
+                flex-direction: column;
+            }
+
+            .add-keyword-btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    {% include "components/sidebar.html" %}
+
+    <div class="dashboard">
+        <main class="main-content">
+            <div class="settings-container">
+                <!-- Header -->
+                <div class="settings-header">
+                    <h1>⚙️ Pengaturan Global</h1>
+                    <p>Kelola keyword yang dikecualikan dari topic modeling (berlaku untuk SEMUA project)</p>
+                </div>
+
+                <!-- Info Banner -->
+                <div class="info-banner">
+                    <h4>🌐 Berlaku Global</h4>
+                    <p>Keyword yang ditambahkan di sini akan dikecualikan dari hasil topic modeling untuk <strong>semua project</strong>, baik yang sudah ada maupun yang akan dibuat.</p>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-keywords">0</div>
+                        <div class="stat-label">Total Keyword Dikecualikan</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="affected-projects">0</div>
+                        <div class="stat-label">Project Terpengaruh</div>
+                    </div>
+                </div>
+
+                <!-- Main Card -->
+                <div class="settings-card">
+                    <h3 style="margin-bottom: var(--space-4);">🚫 Keyword Exclusion</h3>
+
+                    <!-- Input -->
+                    <div class="keyword-input-group">
+                        <input
+                            type="text"
+                            id="keyword-input"
+                            class="keyword-input"
+                            placeholder="Tambah keyword (contoh: buku, baca, novel)"
+                            onkeypress="if(event.key === 'Enter') addKeyword()"
+                        >
+                        <button class="add-keyword-btn" onclick="addKeyword()">
+                            <span>+</span>
+                            <span>Tambah</span>
+                        </button>
+                    </div>
+
+                    <!-- Keywords List -->
+                    <div class="keywords-list" id="keywords-list">
+                        <div class="keywords-empty" id="keywords-empty">
+                            Belum ada keyword yang dikecualikan
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="actions">
+                        <button class="btn btn-secondary" onclick="clearAllKeywords()">
+                            🗑️ Hapus Semua
+                        </button>
+                        <button class="btn btn-primary" onclick="saveAndRefresh()">
+                            💾 Simpan Perubahan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="settings-card">
+                    <h3 style="margin-bottom: var(--space-4);">📖 Cara Penggunaan</h3>
+                    <ol style="padding-left: var(--space-6); line-height: 1.8;">
+                        <li>Masukkan keyword yang ingin dikecualikan (contoh: kata-kata umum yang tidak relevan)</li>
+                        <li>Klik tombol <strong>+ Tambah</strong> atau tekan <strong>Enter</strong></li>
+                        <li>Keyword akan otomatis tersimpan (persisten)</li>
+                        <li>Untuk menghapus, klik tombol <strong>&times;</strong> pada keyword</li>
+                        <li>Keyword berlaku untuk <strong>semua project</strong></li>
+                    </ol>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        let excludedKeywords = [];
+
+        // Check authentication
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!checkAuth()) {
+                window.location.href = '/login';
+                return;
+            }
+            loadKeywords();
+            loadProjectCount();
+        });
+
+        // Load excluded keywords
+        async function loadKeywords() {
+            try {
+                const response = await apiRequest('/api/projects/excluded-keywords');
+                if (response.success) {
+                    excludedKeywords = response.data.keywords || [];
+                    renderKeywords();
+                    updateStats();
+                }
+            } catch (error) {
+                console.error('Gagal memuat excluded keywords:', error);
+            }
+        }
+
+        // Render keywords list
+        function renderKeywords() {
+            const container = document.getElementById('keywords-list');
+            const emptyMsg = document.getElementById('keywords-empty');
+
+            if (excludedKeywords.length === 0) {
+                container.innerHTML = `
+                    <div class="keywords-empty" id="keywords-empty">
+                        Belum ada keyword yang dikecualikan
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = excludedKeywords.map((keyword, index) => `
+                <span class="keyword-tag">
+                    ${keyword}
+                    <button onclick="removeKeyword(${index})" title="Hapus">&times;</button>
+                </span>
+            `).join('');
+        }
+
+        // Add keyword
+        async function addKeyword() {
+            const input = document.getElementById('keyword-input');
+            const keyword = input.value.trim().toLowerCase();
+
+            if (!keyword) {
+                alert('Silakan masukkan keyword');
+                return;
+            }
+
+            // Check for duplicates
+            if (excludedKeywords.includes(keyword)) {
+                alert('Keyword sudah ada');
+                input.value = '';
+                return;
+            }
+
+            excludedKeywords.push(keyword);
+            input.value = '';
+
+            // Save to server
+            await saveKeywords();
+            renderKeywords();
+            updateStats();
+        }
+
+        // Remove keyword
+        async function removeKeyword(index) {
+            excludedKeywords.splice(index, 1);
+
+            // Save to server
+            await saveKeywords();
+            renderKeywords();
+            updateStats();
+        }
+
+        // Clear all keywords
+        async function clearAllKeywords() {
+            if (excludedKeywords.length === 0) {
+                alert('Tidak ada keyword untuk dihapus');
+                return;
+            }
+
+            if (!confirm(`Hapus semua ${excludedKeywords.length} keyword?`)) {
+                return;
+            }
+
+            try {
+                const response = await apiRequest('/api/projects/excluded-keywords', {
+                    method: 'DELETE'
+                });
+
+                if (response.success) {
+                    excludedKeywords = [];
+                    renderKeywords();
+                    updateStats();
+                    alert('Semua keyword berhasil dihapus');
+                }
+            } catch (error) {
+                console.error('Gagal menghapus keyword:', error);
+                alert('Gagal menghapus keyword');
+            }
+        }
+
+        // Save keywords to server
+        async function saveKeywords() {
+            try {
+                const response = await apiRequest('/api/projects/excluded-keywords', {
+                    method: 'POST',
+                    body: JSON.stringify({ keywords: excludedKeywords })
+                });
+
+                if (!response.success) {
+                    throw new Error(response.message);
+                }
+            } catch (error) {
+                console.error('Gagal menyimpan keyword:', error);
+                throw error;
+            }
+        }
+
+        // Save and refresh
+        async function saveAndRefresh() {
+            try {
+                await saveKeywords();
+                alert('Perubahan berhasil disimpan! Keyword akan diterapkan pada semua project.');
+            } catch (error) {
+                alert('Gagal menyimpan perubahan');
+            }
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('total-keywords').textContent = excludedKeywords.length;
+        }
+
+        // Load project count
+        async function loadProjectCount() {
+            try {
+                const response = await apiRequest('/api/projects/');
+                if (response.success) {
+                    document.getElementById('affected-projects').textContent = response.data.length;
+                }
+            } catch (error) {
+                console.error('Gagal memuat jumlah project:', error);
+            }
+        }
+    </script>
+</body>
+
+</html>

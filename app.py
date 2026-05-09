@@ -166,6 +166,14 @@ async def projects(request: Request):
     })
 
 
+@app.get("/settings")
+async def settings(request: Request):
+    """
+    Settings page - global excluded keywords management
+    """
+    return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings"})
+
+
 # Entry point for running with uvicorn directly
 if __name__ == "__main__":
     import uvicorn

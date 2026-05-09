@@ -22,14 +22,14 @@ except LookupError:
     nltk.download('stopwords', quiet=True)
 
 class TextPreprocessor:
-    def __init__(self):
+    def __init__(self, excluded_keywords=None):
         # Initialize Sastrawi stemmer for Indonesian
         factory = StemmerFactory()
         self.stemmer = factory.create_stemmer()
-        
+
         # Indonesian stopwords
         self.stopwords = set(stopwords.words('indonesian'))
-        
+
         # Additional Indonesian stopwords
         additional_stopwords = {
             'yang', 'dan', 'di', 'ke', 'dari', 'ini', 'itu', 'dengan', 'untuk',
@@ -45,6 +45,9 @@ class TextPreprocessor:
             'seorang', 'suatu', 'salah', 'satu', 'dua', 'tiga', 'empat', 'lima'
         }
         self.stopwords.update(additional_stopwords)
+
+        # Custom excluded keywords (flexible, can be passed during training)
+        self.excluded_keywords = set(kw.lower() for kw in (excluded_keywords or []))
     
     def case_folding(self, text):
         """Convert text to lowercase"""
@@ -69,13 +72,24 @@ class TextPreprocessor:
         return word_tokenize(text)
     
     def remove_stopwords(self, tokens):
-        """Remove stopwords from tokens"""
-        return [token for token in tokens if token not in self.stopwords and len(token) > 2]
+        """Remove stopwords and excluded keywords from tokens"""
+        return [token for token in tokens
+                if token not in self.stopwords
+                and token not in self.excluded_keywords
+                and len(token) > 2]
     
     def stem(self, tokens):
         """Apply stemming to tokens"""
         return [self.stemmer.stem(token) for token in tokens]
-    
+
+    def set_excluded_keywords(self, keywords):
+        """Set custom excluded keywords dynamically"""
+        self.excluded_keywords = set(kw.lower() for kw in keywords)
+
+    def get_excluded_keywords(self):
+        """Get current excluded keywords"""
+        return list(self.excluded_keywords)
+
     def preprocess(self, text):
         """Full preprocessing pipeline"""
         # Step 1: Case folding

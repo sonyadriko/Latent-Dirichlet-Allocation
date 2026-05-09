@@ -154,8 +154,10 @@ The application implements a 4-step KDD process:
 
 **CrawlerService** (`services/crawler.py`):
 - Web scraping with BeautifulSoup and requests
-- Intelligent content extraction for news articles
+- Specialized Gramedia.com product extraction (extracts full synopsis from JSON embedded in HTML)
+- Generic article extraction with multiple fallback selectors
 - Error handling and rate limiting
+- **Note**: Gramedia crawler regex-extracts long descriptions (1000+ chars) from embedded JSON, avoiding short meta descriptions
 
 **OnlineDocumentCrawler** (`services/online_crawler.py`):
 - Crawls individual URLs to add documents to existing projects
@@ -188,7 +190,7 @@ FastAPI routers with automatic OpenAPI documentation:
 - `/api/auth/*` - JWT-based user authentication endpoints
 - `/api/kdd/*` - KDD pipeline management endpoints
 - `/api/search/*` - Document search and similarity endpoints
-- `/api/projects/*` - Project CRUD and management endpoints
+- `/api/projects/*` - Project CRUD, list, delete, and document viewing (`/{id}/documents`)
 - `/api/health` - Health check endpoint
 
 **Authentication:**
@@ -232,6 +234,7 @@ The application uses a hybrid storage approach:
 - Gensim LDA models saved as `.model` files in `data/results/`
 - Dictionary and corpus saved separately as `.dict` and `.mm` files
 - Models organized by project: `data/results/{project_name}_*`
+- Documents stored with `content_preview` (1000 chars) for display in project management UI
 
 ### Frontend
 
@@ -240,7 +243,14 @@ Single-page application with Jinja2 templates and vanilla JavaScript:
 - File upload for URL crawling
 - Real-time KDD pipeline progress tracking
 - Topic visualization and analysis results
-- Project management (list, delete, switch projects)
+- Project management with document viewer modal (`/projects`)
+- Responsive design with sidebar navigation
+
+### Scripts
+
+Utility scripts in `scripts/` directory:
+- `recrawl_project.py` - Re-crawl project URLs to update document content
+- `migrate_json_to_db.py` - Migrate legacy JSON data to SQLite database
 
 ### Indonesian NLP Stack
 
@@ -272,3 +282,12 @@ The application uses specialized Indonesian language processing:
 - Alembic is installed for database migrations
 - Migration scripts would go in `alembic/` directory
 - Use `alembic revision --autogenerate -m "description"` for schema changes
+
+**Testing Crawler:**
+```bash
+# Test crawler on specific URL
+python -c "from services.crawler import CrawlerService; c = CrawlerService(); result, err = c.crawl_url('https://example.com'); print(result if result else err)"
+
+# Re-crawl existing project for updated content
+python scripts/recrawl_project.py <project_id>
+```
