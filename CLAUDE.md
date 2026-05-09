@@ -272,3 +272,8 @@ The application uses specialized Indonesian language processing:
 - Alembic is installed for database migrations
 - Migration scripts would go in `alembic/` directory
 - Use `alembic revision --autogenerate -m "description"` for schema changes
+
+**JSON to SQLite Migration:**
+- Use `scripts/migrate_json_to_db.py` to migrate existing JSON data to SQLite
+- Run: `python scripts/migrate_json_to_db.py` (from project root)
+- Preserves users, projects, and pipeline results from legacy JSON files

@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Document Input - LDA News Trend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .input-form {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-8);
+            margin-bottom: var(--space-8);
+        }
+
+        .document-list {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            margin-bottom: var(--space-6);
+        }
+
+        .document-item {
+            background: var(--bg-darker);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            margin-bottom: var(--space-3);
+            transition: all var(--transition-normal);
+        }
+
+        .document-item:hover {
+            border-color: var(--primary);
+            transform: translateX(4px);
+        }
+
+        .document-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: var(--space-3);
+        }
+
+        .document-title {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: var(--space-2);
+        }
+
+        .document-preview {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            max-height: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .document-meta {
+            display: flex;
+            gap: var(--space-4);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: var(--space-2);
+        }
+
+        .document-actions {
+            display: flex;
+            gap: var(--space-2);
+        }
+
+        .btn-sm {
+            padding: var(--space-1) var(--space-2);
+            font-size: 0.75rem;
+        }
+
+        .btn-edit {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-delete {
+            background: var(--error);
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: var(--space-8);
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: var(--space-4);
+            opacity: 0.5;
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: var(--space-1);
+        }
+
+        .char-counter.warning {
+            color: var(--warning);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, var(--success), #10b981);
+        }
+
+        .btn-process {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        }
+
+        .stats-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            text-align: center;
+        }
+
+        .stats-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stats-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+    {% include "components/sidebar.html" %}
+
+    <div class="dashboard">
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">📝 Manual Document Input</h1>
+                <p class="page-subtitle">Tambahkan dokumen secara manual untuk analisis LDA</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <!-- Project Selection -->
+            <div class="card" style="margin-bottom: var(--space-6);">
+                <h3 style="color: var(--primary); margin-bottom: var(--space-4);">📁 Pilih Project</h3>
+
+                <div class="form-group">
+                    <label class="form-label" for="project-select">Project</label>
+                    <select id="project-select" class="form-input" onchange="onProjectChange()">
+                        <option value="">-- Tanpa Project (Draft) --</option>
+                        <option value="new">+ Buat Project Baru</option>
+                    </select>
+                    <small style="color: var(--text-muted); display: block; margin-top: var(--space-1);">
+                        Pilih project yang sudah ada atau buat project baru
+                    </small>
+                </div>
+
+                <!-- New Project Form -->
+                <div id="new-project-form" class="hidden" style="margin-top: var(--space-4); padding: var(--space-4); background: rgba(99, 102, 241, 0.05); border-radius: var(--radius-lg);">
+                    <h4 style="color: var(--primary); margin-bottom: var(--space-3);">Buat Project Baru</h4>
+                    <div class="form-group">
+                        <label class="form-label" for="new-project-name">Nama Project</label>
+                        <input type="text" id="new-project-name" class="form-input" placeholder="Contoh: Analisis Berita Teknologi">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-project-description">Deskripsi</label>
+                        <input type="text" id="new-project-description" class="form-input" placeholder="Deskripsi singkat...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-project-topics">Jumlah Topik</label>
+                        <input type="number" id="new-project-topics" class="form-input" value="5" min="2" max="50">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Document Input Form -->
+            <div class="input-form">
+                <h3 style="color: var(--primary); margin-bottom: var(--space-4);">➕ Tambah Dokumen</h3>
+
+                <div class="form-group">
+                    <label class="form-label" for="doc-title">Judul Dokumen *</label>
+                    <input type="text" id="doc-title" class="form-input" placeholder="Masukkan judul dokumen..." required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="doc-content">Isi Dokumen *</label>
+                    <textarea id="doc-content" class="form-input" rows="10" placeholder="Masukkan isi lengkap dokumen di sini..." required></textarea>
+                    <div class="char-counter">
+                        <span id="char-count">0</span> karakter
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: var(--space-3);">
+                    <button type="button" class="btn" id="btn-add-doc" onclick="addDocument()">
+                        ➕ Tambah ke List
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                        🗑️ Reset Form
+                    </button>
+                </div>
+            </div>
+
+            <!-- Document Stats -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
+                <div class="stats-card">
+                    <div class="stats-value" id="total-docs">0</div>
+                    <div class="stats-label">Total Dokumen</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-value" id="total-chars">0</div>
+                    <div class="stats-label">Total Karakter</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-value" id="total-words">0</div>
+                    <div class="stats-label">Total Kata</div>
+                </div>
+            </div>
+
+            <!-- Document List -->
+            <div class="document-list">
+                <h3 style="color: var(--primary); margin-bottom: var(--space-4);">
+                    📄 Daftar Dokumen (<span id="doc-count">0</span>)
+                </h3>
+
+                <div id="documents-container">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>Belum ada dokumen ditambahkan</p>
+                        <p style="font-size: 0.875rem;">Isi form di atas dan klik "Tambah ke List"</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button type="button" class="btn btn-save" id="btn-save-all" onclick="saveAllDocuments()" disabled>
+                    💾 Simpan Semua Dokumen
+                </button>
+                <button type="button" class="btn btn-process" id="btn-process" onclick="processWithKDD()" disabled>
+                    🧠 Proses dengan KDD Pipeline
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="clearAllDocuments()">
+                    🗑️ Hapus Semua
+                </button>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // Global state
+        let documentsBuffer = [];
+        let availableProjects = [];
+        let currentProject = null;
+        let editingIndex = null;
+
+        // Check authentication on load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!checkAuth()) {
+                window.location.href = '/login';
+                return;
+            }
+
+            loadProjects();
+            setupCharCounter();
+        });
+
+        // Setup character counter
+        function setupCharCounter() {
+            const contentArea = document.getElementById('doc-content');
+            const charCount = document.getElementById('char-count');
+
+            contentArea.addEventListener('input', () => {
+                const count = contentArea.value.length;
+                charCount.textContent = count.toLocaleString('id-ID');
+
+                if (count > 10000) {
+                    charCount.classList.add('warning');
+                } else {
+                    charCount.classList.remove('warning');
+                }
+            });
+        }
+
+        // Load available projects
+        async function loadProjects() {
+            try {
+                const response = await apiRequest('/api/projects/');
+                if (response.success) {
+                    availableProjects = response.data;
+                    populateProjectSelect();
+                }
+            } catch (error) {
+                console.error('Error loading projects:', error);
+            }
+        }
+
+        // Populate project select dropdown
+        function populateProjectSelect() {
+            const select = document.getElementById('project-select');
+
+            // Clear existing options except first two
+            while (select.children.length > 2) {
+                select.removeChild(select.lastChild);
+            }
+
+            // Add project options
+            availableProjects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = `${project.name} (${project.document_count} dokumen)`;
+                select.appendChild(option);
+            });
+        }
+
+        // Handle project selection change
+        async function onProjectChange() {
+            const select = document.getElementById('project-select');
+            const newProjectForm = document.getElementById('new-project-form');
+
+            if (select.value === 'new') {
+                newProjectForm.classList.remove('hidden');
+                currentProject = null;
+                // Clear documents when creating new project
+                documentsBuffer = [];
+                updateDocumentList();
+            } else if (select.value) {
+                newProjectForm.classList.add('hidden');
+                currentProject = availableProjects.find(p => p.id === parseInt(select.value));
+                // Load documents from selected project
+                await loadProjectDocuments(select.value);
+            } else {
+                newProjectForm.classList.add('hidden');
+                currentProject = null;
+                // Clear documents when no project selected
+                documentsBuffer = [];
+                updateDocumentList();
+            }
+        }
+
+        // Load documents from project (try database first, then JSON file)
+        async function loadProjectDocuments(projectId) {
+            try {
+                // First try to get from database
+                const dbResponse = await apiRequest(`/api/documents/manual?project_id=${projectId}`);
+
+                console.log('Response from /api/documents/manual:', dbResponse);
+
+                if (dbResponse && dbResponse.documents && dbResponse.documents.length > 0) {
+                    // Documents found in database
+                    documentsBuffer = dbResponse.documents.map(doc => ({
+                        id: doc.id,
+                        title: doc.title || 'Untitled',
+                        content: doc.content || '',
+                        created_at: doc.created_at,
+                        is_existing: true
+                    }));
+
+                    updateDocumentList();
+                    showAlert(`${documentsBuffer.length} dokumen dimuat dari database`, 'success');
+                    return;
+                }
+
+                // If database is empty, try JSON file (legacy)
+                console.log('Database empty, trying JSON file...');
+                const projectResponse = await apiRequest(`/api/projects/${projectId}/documents`);
+
+                console.log('Response from /api/projects/{id}/documents:', projectResponse);
+
+                if (projectResponse && projectResponse.success && projectResponse.data && projectResponse.data.documents && projectResponse.data.documents.length > 0) {
+                    // Documents found in JSON file
+                    documentsBuffer = projectResponse.data.documents.map((doc, index) => ({
+                        id: doc.id || `json_${index}`, // Use JSON id or create temp id
+                        title: doc.title || doc.judul || 'Untitled',
+                        content: doc.content || doc.content_preview || doc.isi || doc.snippet || '',
+                        created_at: doc.created_at || new Date().toISOString(),
+                        is_existing: true,
+                        is_json: true // Mark as from JSON file
+                    }));
+
+                    updateDocumentList();
+                    showAlert(`${documentsBuffer.length} dokumen dimuat dari JSON file (legacy)`, 'success');
+                } else {
+                    showAlert('Project ini belum memiliki dokumen', 'info');
+                    documentsBuffer = [];
+                    updateDocumentList();
+                }
+            } catch (error) {
+                console.error('Error loading project documents:', error);
+                showAlert('Gagal memuat dokumen dari project: ' + error.message, 'error');
+                documentsBuffer = [];
+                updateDocumentList();
+            }
+        }
+
+        // Add document to buffer
+        function addDocument() {
+            const titleInput = document.getElementById('doc-title');
+            const contentInput = document.getElementById('doc-content');
+
+            const title = titleInput.value.trim();
+            const content = contentInput.value.trim();
+
+            if (!title || !content) {
+                showAlert('Judul dan isi dokumen wajib diisi!', 'error');
+                return;
+            }
+
+            // Check if editing
+            if (editingIndex !== null) {
+                documentsBuffer[editingIndex] = {
+                    id: documentsBuffer[editingIndex].id,
+                    title,
+                    content,
+                    created_at: documentsBuffer[editingIndex].created_at
+                };
+                editingIndex = null;
+                document.getElementById('btn-add-doc').textContent = '➕ Tambah ke List';
+            } else {
+                // Add new document
+                documentsBuffer.push({
+                    id: Date.now(),
+                    title,
+                    content,
+                    created_at: new Date().toISOString()
+                });
+            }
+
+            clearForm();
+            updateDocumentList();
+            showAlert('Dokumen ditambahkan ke list', 'success');
+        }
+
+        // Clear form
+        function clearForm() {
+            document.getElementById('doc-title').value = '';
+            document.getElementById('doc-content').value = '';
+            document.getElementById('char-count').textContent = '0';
+            editingIndex = null;
+            document.getElementById('btn-add-doc').textContent = '➕ Tambah ke List';
+        }
+
+        // Update document list display
+        function updateDocumentList() {
+            const docCount = document.getElementById('doc-count');
+            const totalDocs = document.getElementById('total-docs');
+            const totalChars = document.getElementById('total-chars');
+            const totalWords = document.getElementById('total-words');
+            const saveBtn = document.getElementById('btn-save-all');
+            const processBtn = document.getElementById('btn-process');
+
+            docCount.textContent = documentsBuffer.length;
+            totalDocs.textContent = documentsBuffer.length;
+
+            // Calculate stats
+            let chars = 0;
+            let words = 0;
+            documentsBuffer.forEach(doc => {
+                chars += doc.content.length;
+                words += doc.content.split(/\s+/).filter(w => w.length > 0).length;
+            });
+
+            totalChars.textContent = chars.toLocaleString('id-ID');
+            totalWords.textContent = words.toLocaleString('id-ID');
+
+            // Enable/disable buttons
+            const newDocsCount = documentsBuffer.filter(d => !d.is_existing).length;
+            saveBtn.disabled = newDocsCount === 0;
+
+            // Update save button text
+            if (newDocsCount > 0) {
+                saveBtn.innerHTML = `💾 Simpan ${newDocsCount} Dokumen Baru`;
+            } else {
+                saveBtn.innerHTML = '💾 Simpan Semua Dokumen';
+            }
+
+            processBtn.disabled = documentsBuffer.length === 0;
+
+            // Update list
+            const documentsContainer = document.getElementById('documents-container');
+
+            if (documentsBuffer.length === 0) {
+                documentsContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>Belum ada dokumen ditambahkan</p>
+                        <p style="font-size: 0.875rem;">Isi form di atas dan klik "Tambah ke List"</p>
+                    </div>
+                `;
+                return;
+            }
+
+            documentsContainer.innerHTML = documentsBuffer.map((doc, index) => {
+                const isExisting = doc.is_existing === true;
+
+                return `
+                <div class="document-item" style="${isExisting ? 'border-color: var(--success);' : ''}">
+                    <div class="document-item-header">
+                        <div style="flex: 1;">
+                            <div class="document-title">
+                                ${escapeHtml(doc.title)}
+                                ${isExisting ? '<span style="background: var(--success); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Tersimpan</span>' : '<span style="background: var(--warning); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Baru</span>'}
+                            </div>
+                            <div class="document-preview">${escapeHtml(doc.content.substring(0, 200))}${doc.content.length > 200 ? '...' : ''}</div>
+                            <div class="document-meta">
+                                <span>📝 ${doc.content.length.toLocaleString('id-ID')} karakter</span>
+                                <span>📖 ${doc.content.split(/\s+/).filter(w => w.length > 0).length.toLocaleString('id-ID')} kata</span>
+                                ${isExisting ? '<span style="color: var(--success);">✓ Sudah tersimpan di database</span>' : '<span style="color: var(--warning);">⏳ Belum disimpan</span>'}
+                            </div>
+                        </div>
+                        <div class="document-actions">
+                            ${!isExisting ? `
+                            <button class="btn-sm btn-edit" onclick="editDocument(${index})" title="Edit">
+                                ✏️
+                            </button>
+                            <button class="btn-sm btn-delete" onclick="deleteDocument(${index})" title="Hapus">
+                                🗑️
+                            </button>
+                            ` : `
+                            <button class="btn-sm" style="background: var(--text-muted); opacity: 0.5;" disabled title="Dokumen tersimpan tidak bisa diedit di sini">
+                                ✏️
+                            </button>
+                            <button class="btn-sm btn-delete" onclick="deleteDocument(${index})" title="Hapus dari database" style="background: var(--error);">
+                                🗑️
+                            </button>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        // Edit document
+        function editDocument(index) {
+            const doc = documentsBuffer[index];
+            document.getElementById('doc-title').value = doc.title;
+            document.getElementById('doc-content').value = doc.content;
+            document.getElementById('char-count').textContent = doc.content.length.toLocaleString('id-ID');
+            editingIndex = index;
+            document.getElementById('btn-add-doc').textContent = '💾 Update Dokumen';
+
+            // Scroll to form
+            document.querySelector('.input-form').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Delete document
+        async function deleteDocument(index) {
+            const doc = documentsBuffer[index];
+
+            if (doc.is_existing) {
+                // Delete from database
+                if (!confirm(`Hapus dokumen "${doc.title}" dari database?`)) {
+                    return;
+                }
+
+                try {
+                    const response = await apiRequest(`/api/documents/manual/${doc.id}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.success) {
+                        documentsBuffer.splice(index, 1);
+                        updateDocumentList();
+                        showAlert('Dokumen dihapus dari database', 'success');
+
+                        // Reload projects to update document counts
+                        if (currentProject) {
+                            await loadProjects();
+                        }
+                    } else {
+                        showAlert('Gagal menghapus: ' + response.message, 'error');
+                    }
+                } catch (error) {
+                    showAlert('Error: ' + error.message, 'error');
+                }
+            } else {
+                // Delete from buffer only
+                if (confirm('Hapus dokumen ini dari list?')) {
+                    documentsBuffer.splice(index, 1);
+                    if (editingIndex === index) {
+                        clearForm();
+                    } else if (editingIndex > index) {
+                        editingIndex--;
+                    }
+                    updateDocumentList();
+                    showAlert('Dokumen dihapus', 'info');
+                }
+            }
+        }
+
+        // Clear all documents
+        function clearAllDocuments() {
+            if (documentsBuffer.length === 0) return;
+
+            if (confirm(`Hapus semua ${documentsBuffer.length} dokumen dari list?`)) {
+                documentsBuffer = [];
+                editingIndex = null;
+                clearForm();
+                updateDocumentList();
+                showAlert('Semua dokumen dihapus', 'info');
+            }
+        }
+
+        // Save all documents
+        async function saveAllDocuments() {
+            if (documentsBuffer.length === 0) {
+                showAlert('Tidak ada dokumen untuk disimpan', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-all');
+            const originalText = btn.innerHTML;
+
+            try {
+                // Handle new project creation
+                let projectId = document.getElementById('project-select').value;
+
+                if (projectId === 'new') {
+                    const projectName = document.getElementById('new-project-name').value.trim();
+                    const projectDescription = document.getElementById('new-project-description').value.trim();
+                    const projectTopics = document.getElementById('new-project-topics').value;
+
+                    if (!projectName) {
+                        showAlert('Masukkan nama project!', 'error');
+                        return;
+                    }
+
+                    // Create project first
+                    btn.disabled = true;
+                    btn.innerHTML = '<div class="spinner"></div> Membuat Project...';
+
+                    const projectResponse = await apiRequest('/api/projects/', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: projectName,
+                            description: projectDescription,
+                            num_topics: parseInt(projectTopics) || 5
+                        })
+                    });
+
+                    if (!projectResponse.success) {
+                        throw new Error(projectResponse.message);
+                    }
+
+                    projectId = projectResponse.data.id;
+                    document.getElementById('project-select').value = projectId;
+                    currentProject = projectResponse.data;
+                }
+
+                // Save documents (only new ones, not existing)
+                const newDocuments = documentsBuffer.filter(d => !d.is_existing);
+
+                if (newDocuments.length === 0) {
+                    showAlert('Tidak ada dokumen baru untuk disimpan. Semua dokumen sudah tersimpan.', 'info');
+                    return;
+                }
+
+                btn.innerHTML = '<div class="spinner"></div> Menyimpan Dokumen...';
+
+                const response = await apiRequest('/api/documents/manual/bulk', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        documents: newDocuments.map(d => ({
+                            title: d.title,
+                            content: d.content
+                        })),
+                        project_id: projectId ? parseInt(projectId) : null
+                    })
+                });
+
+                if (response.success) {
+                    const existingCount = documentsBuffer.filter(d => d.is_existing).length;
+                    let message = `✓ ${response.created_count} dokumen baru berhasil disimpan!`;
+                    if (existingCount > 0) {
+                        message += `\n(${existingCount} dokumen sudah ada dari sebelumnya)`;
+                    }
+                    showAlert(message, 'success');
+
+                    // Reload project documents to refresh the list
+                    if (projectId) {
+                        await loadProjectDocuments(projectId);
+                    } else {
+                        // Clear buffer if no project
+                        documentsBuffer = [];
+                        editingIndex = null;
+                        clearForm();
+                        updateDocumentList();
+                    }
+                    updateDocumentList();
+
+                    // Reset project form if new project was created
+                    if (document.getElementById('project-select').value === 'new') {
+                        document.getElementById('new-project-name').value = '';
+                        document.getElementById('new-project-description').value = '';
+                    }
+
+                    // Reload projects to update document counts
+                    await loadProjects();
+                } else {
+                    throw new Error(response.message);
+                }
+
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        // Process with KDD pipeline
+        async function processWithKDD() {
+            if (documentsBuffer.length === 0) {
+                showAlert('Tidak ada dokumen untuk diproses', 'error');
+                return;
+            }
+
+            // First save documents
+            await saveAllDocuments();
+
+            if (documentsBuffer.length > 0) {
+                showAlert('Dokumen belum tersimpan. Silakan simpan dulu.', 'error');
+                return;
+            }
+
+            // Redirect to admin page with instructions
+            showAlert('Dokumen tersimpan! Mengalihkan ke halaman KDD Pipeline...', 'info');
+
+            setTimeout(() => {
+                window.location.href = '/admin';
+            }, 1500);
+        }
+
+        // Show alert
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alert-container');
+            const alertClass = type === 'success' ? 'alert-success' :
+                type === 'error' ? 'alert-error' : 'alert-info';
+
+            container.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
+                </div>
+            `;
+
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+
+</html>

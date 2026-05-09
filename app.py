@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config import Config
-from routers import auth, kdd, search, project
+from routers import auth, kdd, search, project, documents
 
 # Database and Error Handling (Phase 2 Backend Improvements)
 from core.database import init_database, close_database
@@ -82,6 +82,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(kdd.router, prefix="/api/kdd", tags=["KDD Pipeline"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
 app.include_router(project.router, prefix="/api/projects", tags=["Projects"])
+app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 
 
 # Health check endpoint
@@ -163,6 +164,18 @@ async def projects(request: Request):
     return templates.TemplateResponse("projects.html", {
         "request": request,
         "active_page": "projects"
+    })
+
+
+@app.get("/manual-input")
+async def manual_input(request: Request):
+    """
+    Manual document input page
+    Authentication is handled client-side via localStorage
+    """
+    return templates.TemplateResponse("manual-input.html", {
+        "request": request,
+        "active_page": "manual-input"
     })
 
 

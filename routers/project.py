@@ -36,6 +36,59 @@ async def get_projects():
         }
 
 
+@router.post("/")
+async def create_project(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Create a new project.
+
+    Request body:
+    - name: Project name (required)
+    - description: Project description (optional)
+    - num_topics: Number of topics for LDA (optional, default: 5)
+    """
+    try:
+        from pydantic import BaseModel, Field
+
+        class ProjectCreateRequest(BaseModel):
+            name: str = Field(..., min_length=2, max_length=100)
+            description: str = Field(default="")
+            num_topics: int = Field(default=5, ge=1, le=50)
+
+        data = await request.json()
+        project_req = ProjectCreateRequest(**data)
+
+        # Create project using Project model
+        project, error = Project.create(
+            name=project_req.name,
+            description=project_req.description,
+            num_topics=project_req.num_topics,
+            document_count=0,
+            coherence_score=0.0,
+            created_by=current_user.id
+        )
+
+        if error:
+            return {
+                'success': False,
+                'message': error
+            }
+
+        return {
+            'success': True,
+            'data': project.to_dict(),
+            'message': f'Project "{project.name}" created successfully'
+        }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error creating project: {str(e)}'
+        }
+
+
 @router.get("/list")
 async def list_projects(
     current_user: User = Depends(get_current_user),
