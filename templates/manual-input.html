@@ -734,20 +734,215 @@
                 return;
             }
 
-            // First save documents
-            await saveAllDocuments();
+            const btn = document.getElementById('btn-process');
+            const originalText = btn.innerHTML;
+            let projectId = null;
 
-            if (documentsBuffer.length > 0) {
-                showAlert('Dokumen belum tersimpan. Silakan simpan dulu.', 'error');
-                return;
+            console.log('=== Starting KDD Pipeline Process ===');
+            console.log('Documents in buffer:', documentsBuffer.length);
+
+            try {
+                // Step 1: Validate and get/create project
+                btn.disabled = true;
+                const projectSelect = document.getElementById('project-select').value;
+
+                console.log('Project selection:', projectSelect);
+
+                if (!projectSelect || projectSelect === '') {
+                    showAlert('⚠️ Pilih project atau buat project baru terlebih dahulu!', 'error');
+                    btn.disabled = false;
+                    return;
+                }
+
+                // Handle new project creation
+                if (projectSelect === 'new') {
+                    const projectName = document.getElementById('new-project-name').value.trim();
+                    const projectDescription = document.getElementById('new-project-description').value.trim();
+                    const projectTopics = document.getElementById('new-project-topics').value;
+
+                    console.log('Creating new project:', projectName);
+
+                    if (!projectName) {
+                        showAlert('⚠️ Masukkan nama project!', 'error');
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    btn.innerHTML = '<div class="spinner"></div> Membuat Project...';
+
+                    // Create project first
+                    const projectResponse = await apiRequest('/api/projects/', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: projectName,
+                            description: projectDescription,
+                            num_topics: parseInt(projectTopics) || 5
+                        })
+                    });
+
+                    if (!projectResponse.success) {
+                        throw new Error(projectResponse.message);
+                    }
+
+                    projectId = projectResponse.data.id;
+                    currentProject = projectResponse.data;
+                    console.log('Project created successfully:', projectId);
+                    showAlert(`✓ Project "${projectName}" berhasil dibuat!`, 'success');
+                } else {
+                    projectId = parseInt(projectSelect);
+                    console.log('Using existing project:', projectId);
+
+                    if (!currentProject || currentProject.id !== projectId) {
+                        // Load project info if not already loaded
+                        const projectResponse = await apiRequest(`/api/projects/${projectId}`);
+                        if (projectResponse.success) {
+                            currentProject = projectResponse.data;
+                            console.log('Project loaded:', currentProject);
+                        }
+                    }
+                }
+
+                // Step 2: Save new documents
+                btn.innerHTML = '<div class="spinner"></div> Menyimpan Dokumen...';
+
+                const newDocuments = documentsBuffer.filter(d => !d.is_existing);
+
+                if (newDocuments.length > 0) {
+                    console.log(`Saving ${newDocuments.length} new documents to project ${projectId}`);
+
+                    const saveResponse = await apiRequest('/api/documents/manual/bulk', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            documents: newDocuments.map(d => ({
+                                title: d.title,
+                                content: d.content
+                            })),
+                            project_id: projectId
+                        })
+                    });
+
+                    if (!saveResponse.success) {
+                        throw new Error(saveResponse.message);
+                    }
+
+                    console.log(`Successfully saved ${saveResponse.created_count} documents`);
+                    showAlert(`✓ ${saveResponse.created_count} dokumen baru berhasil disimpan!`, 'success');
+
+                    // Wait a bit for database to commit
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } else {
+                    console.log('No new documents to save, all documents already exist');
+                    showAlert('ℹ️ Semua dokumen sudah tersimpan. Melanjutkan ke training...', 'info');
+                }
+
+                // Step 3: Load all documents from database for training
+                btn.innerHTML = '<div class="spinner"></div> Memuat Dokumen untuk Training...';
+
+                const docsResponse = await apiRequest(`/api/documents/manual?project_id=${projectId}`);
+
+                console.log('Documents response:', docsResponse);
+
+                // Check response format
+                let documents = [];
+                if (docsResponse.success && docsResponse.documents) {
+                    documents = docsResponse.documents;
+                } else if (Array.isArray(docsResponse)) {
+                    // Handle if response is directly an array
+                    documents = docsResponse;
+                } else if (docsResponse.data && Array.isArray(docsResponse.data)) {
+                    // Handle if documents are in data field
+                    documents = docsResponse.data;
+                }
+
+                // If no documents in database, try loading from JSON (legacy)
+                if (documents.length === 0) {
+                    console.log('No documents in database, trying JSON file...');
+                    try {
+                        const projectResponse = await apiRequest(`/api/projects/${projectId}/documents`);
+                        if (projectResponse.success && projectResponse.data && projectResponse.data.documents) {
+                            documents = projectResponse.data.documents.map((doc, index) => ({
+                                id: doc.id || index + 1,
+                                title: doc.title || doc.judul || 'Untitled',
+                                content: doc.content || doc.content_preview || doc.isi || '',
+                                url: doc.url || ''
+                            }));
+                            console.log(`Loaded ${documents.length} documents from JSON file`);
+                        }
+                    } catch (jsonError) {
+                        console.error('Failed to load from JSON:', jsonError);
+                    }
+                }
+
+                if (documents.length === 0) {
+                    throw new Error(`Tidak ada dokumen ditemukan untuk project ini (ID: ${projectId}).\n\nPastikan:\n1. Dokumen sudah disimpan ke database\n2. Project ID benar\n3. Dokumen memiliki content yang valid`);
+                }
+
+                const documentsForTraining = documents.map(doc => ({
+                    id: doc.id,
+                    title: doc.title,
+                    content: doc.content,
+                    url: doc.url || ''
+                }));
+
+                console.log(`Training dengan ${documentsForTraining.length} dokumen dari project ID ${projectId}`);
+
+                // Step 4: Train LDA model
+                btn.innerHTML = '<div class="spinner"></div> Training LDA Model...';
+
+                const numTopics = currentProject ? currentProject.num_topics : 5;
+
+                const trainResponse = await apiRequest('/api/search/train', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        num_topics: numTopics,
+                        documents: documentsForTraining,
+                        project_name: null  // Don't create new project, use existing
+                    })
+                });
+
+                if (!trainResponse.success) {
+                    throw new Error(trainResponse.message);
+                }
+
+                // Success!
+                let message = '🎉 LDA Model berhasil di-training!<br><br>';
+                message += `📄 Dokumen: ${trainResponse.data.num_documents}<br>`;
+                message += `🏷️ Topik: ${trainResponse.data.num_topics}<br>`;
+                message += `📊 Coherence Score: ${trainResponse.data.coherence_score.toFixed(4)}`;
+
+                showAlert(message, 'success');
+
+                // Clear buffer
+                documentsBuffer = [];
+                editingIndex = null;
+                clearForm();
+                updateDocumentList();
+
+                // Reload projects to update counts
+                await loadProjects();
+
+                // Redirect to visualization after 2 seconds
+                setTimeout(() => {
+                    showAlert('Mengalihkan ke halaman visualisasi...', 'info');
+                    setTimeout(() => {
+                        window.location.href = '/visualization';
+                    }, 1000);
+                }, 2000);
+
+            } catch (error) {
+                console.error('=== Process Error ===');
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                console.error('Project ID:', projectId);
+                console.error('Current project:', currentProject);
+                console.error('Documents buffer:', documentsBuffer);
+
+                showAlert('❌ Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                console.log('=== KDD Pipeline Process Ended ===');
             }
-
-            // Redirect to admin page with instructions
-            showAlert('Dokumen tersimpan! Mengalihkan ke halaman KDD Pipeline...', 'info');
-
-            setTimeout(() => {
-                window.location.href = '/admin';
-            }, 1500);
         }
 
         // Show alert

@@ -27,22 +27,9 @@ docker-compose ps
 **Application URLs:**
 - Frontend: `http://localhost:3030`
 - Backend API: `http://localhost:3030/api/*`
-- **Swagger UI (API Documentation): `http://localhost:3030/docs`**
-- **ReDoc: `http://localhost:3030/redoc`**
+- Swagger UI (API Documentation): `http://localhost:3030/docs`
+- ReDoc: `http://localhost:3030/redoc`
 - Health Check: `http://localhost:3030/api/health`
-
-**Backend API Endpoints:**
-- Authentication: `/api/auth/*` (register, login, verify, logout)
-- KDD Pipeline: `/api/kdd/*` (crawl, preprocess, transform, datamining)
-- Search: `/api/search/*` (document search, similarity, train)
-- Projects: `/api/projects/*` (project CRUD, list, delete, set current)
-- Health: `/api/health`
-
-**API Documentation:**
-The application includes auto-generated OpenAPI documentation via FastAPI:
-- Swagger UI at `/docs` - interactive API explorer
-- ReDoc at `/redoc` - alternative documentation format
-- All endpoints are documented with request/response schemas, auth requirements, and examples
 
 ### Local Development
 ```bash
@@ -59,10 +46,15 @@ python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk
 # Run the FastAPI application with uvicorn
 uvicorn app:app --host 0.0.0.0 --port 3030 --reload
 ```
-The application runs on `http://localhost:3030`
 
-### Virtual Environment
-The project uses a Python virtual environment located in `venv/`. Always activate it before running the application.
+### Utility Scripts
+```bash
+# Re-crawl a project to get full content (use with caution - overwrites data)
+python scripts/recrawl_project.py <project_id>
+
+# Migrate legacy JSON data to SQLite database
+python scripts/migrate_json_to_db.py
+```
 
 ## Architecture Overview
 
@@ -83,6 +75,8 @@ app.py                    # FastAPI application entry point
 ├── models/              # Database models and domain models
 ├── core/                # Core utilities (database, security, exceptions)
 ├── templates/           # Jinja2 HTML templates
+├── static/              # CSS, JavaScript, assets
+├── scripts/             # Utility scripts (migration, re-crawling)
 └── data/                # Data storage (SQLite + JSON files)
 ```
 
@@ -97,16 +91,16 @@ app.py                    # FastAPI application entry point
 **FastAPI Application** (`app.py`):
 - Lifespan context manager for startup/shutdown events
 - CORS middleware configuration
-- Router registration (`/api/auth`, `/api/kdd`, `/api/search`, `/api/projects`)
+- Router registration (`/api/auth`, `/api/kdd`, `/api/search`, `/api/projects`, `/api/documents`)
 - Static files and Jinja2 templates setup
-- Page routes (`/`, `/login`, `/register`, `/admin`, `/visualization`, `/projects`)
+- Page routes (`/`, `/login`, `/register`, `/admin`, `/visualization`, `/projects`, `/manual-input`)
 
 ### KDD Pipeline Implementation
 
 The application implements a 4-step KDD process:
 
 1. **Crawling** (`services/crawler.py`, `services/online_crawler.py`):
-   - Extracts content from news URLs
+   - Extracts content from news URLs using BeautifulSoup
    - Supports Indonesian news websites
    - Handles file upload with multiple URLs
    - Online document crawling for adding documents to existing projects
@@ -176,10 +170,10 @@ The application implements a 4-step KDD process:
 - `pipeline_repository.py` - KDD pipeline state management
 
 **Database Models** (`models/db_models.py`):
+- `User` - User accounts with hashed passwords
 - `Project` - LDA project metadata
 - `Document` - News articles and content
-- `User` - User accounts with hashed passwords
-- `PipelineState` - KDD pipeline progress tracking
+- `PipelineRun` - KDD pipeline execution history
 
 ### API Structure
 
@@ -189,6 +183,7 @@ FastAPI routers with automatic OpenAPI documentation:
 - `/api/kdd/*` - KDD pipeline management endpoints
 - `/api/search/*` - Document search and similarity endpoints
 - `/api/projects/*` - Project CRUD and management endpoints
+- `/api/documents/*` - Document management endpoints
 - `/api/health` - Health check endpoint
 
 **Authentication:**
@@ -203,6 +198,7 @@ FastAPI routers with automatic OpenAPI documentation:
 - `/admin` - Admin dashboard with KDD pipeline controls
 - `/visualization` - Topic visualization with pyLDAvis
 - `/projects` - Project management page (list, delete, switch)
+- `/manual-input` - Manual document input page
 
 ### Configuration
 
@@ -212,7 +208,10 @@ LDA parameters are configurable in `config.py`:
 - `PASSES` - LDA training passes (15)
 - `ITERATIONS` - LDA training iterations (100)
 - `DATABASE_URL` - SQLite database connection string
-- `SECRET_KEY` - JWT token signing key
+- `SECRET_KEY` - Application secret key
+- `JWT_SECRET_KEY` - JWT token signing key
+
+Environment variables can override these settings via Docker Compose or `.env` file.
 
 ### Data Storage
 
@@ -241,6 +240,7 @@ Single-page application with Jinja2 templates and vanilla JavaScript:
 - Real-time KDD pipeline progress tracking
 - Topic visualization and analysis results
 - Project management (list, delete, switch projects)
+- Manual document input interface
 
 ### Indonesian NLP Stack
 
