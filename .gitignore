@@ -79,4 +79,7 @@ dmypy.json
 # Data files (keep structure but ignore content)
 data/*.json
 data/results/*
+data/*.db
+data/*.db-shm
+data/*.db-wal
 !data/.gitkeep
