@@ -498,24 +498,44 @@
                 btn.disabled = true;
                 btn.innerHTML = '<div class="spinner"></div> Menyimpan...';
 
-                const response = await apiRequest(`/api/documents/manual/${doc.id}`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ title, content })
-                });
+                let response;
+
+                // Check if document has a real DB ID (numeric) or just a JSON temp ID
+                if (typeof doc.id === 'number' || (typeof doc.id === 'string' && /^\d+$/.test(doc.id))) {
+                    // Real DB ID — update via PUT
+                    response = await apiRequest(`/api/documents/manual/${doc.id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ title, content })
+                    });
+                } else {
+                    // JSON temp ID (e.g. "json_0") — document not in DB yet, create it
+                    const projectId = document.getElementById('project-select').value;
+                    response = await apiRequest('/api/documents/manual', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            title,
+                            content,
+                            project_id: projectId ? parseInt(projectId) : null
+                        })
+                    });
+                }
 
                 if (response.id) {
-                    // Update local buffer
+                    // Update local buffer with real DB data
                     documentsBuffer[index] = {
                         ...documentsBuffer[index],
+                        id: response.id,
                         title: response.title,
-                        content: response.content
+                        content: response.content,
+                        is_existing: true,
+                        is_json: false
                     };
 
                     clearForm();
                     updateDocumentList();
-                    showAlert('Dokumen berhasil diupdate di database!', 'success');
+                    showAlert('Dokumen berhasil disimpan ke database!', 'success');
                 } else {
-                    throw new Error(response.detail || 'Gagal mengupdate dokumen');
+                    throw new Error(response.detail || response.message || 'Gagal menyimpan dokumen');
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
@@ -589,22 +609,27 @@
 
             documentsContainer.innerHTML = documentsBuffer.map((doc, index) => {
                 const isExisting = doc.is_existing === true;
+                const isJsonDoc = typeof doc.id === 'string' && doc.id.startsWith('json_');
                 const isEditing = editingIndex === index;
 
                 return `
-                <div class="document-item" style="${isExisting ? 'border-color: var(--success);' : ''} ${isEditing ? 'border-color: var(--primary); box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);' : ''}">
+                <div class="document-item" style="${isExisting ? 'border-color: var(--success);' : ''} ${isJsonDoc ? 'border-color: var(--warning);' : ''} ${isEditing ? 'border-color: var(--primary); box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);' : ''}">
                     <div class="document-item-header">
                         <div style="flex: 1;">
                             <div class="document-title">
                                 ${escapeHtml(doc.title)}
-                                ${isExisting ? '<span style="background: var(--success); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Tersimpan</span>' : '<span style="background: var(--warning); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Baru</span>'}
+                                ${isExisting && !isJsonDoc ? '<span style="background: var(--success); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Tersimpan</span>' : ''}
+                                ${isJsonDoc ? '<span style="background: var(--warning); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Perlu Disimpan</span>' : ''}
+                                ${!isExisting && !isJsonDoc ? '<span style="background: var(--warning); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Baru</span>' : ''}
                                 ${isEditing ? '<span style="background: var(--primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Sedang Diedit</span>' : ''}
                             </div>
                             <div class="document-preview">${escapeHtml(doc.content.substring(0, 200))}${doc.content.length > 200 ? '...' : ''}</div>
                             <div class="document-meta">
                                 <span>📝 ${doc.content.length.toLocaleString('id-ID')} karakter</span>
                                 <span>📖 ${doc.content.split(/\s+/).filter(w => w.length > 0).length.toLocaleString('id-ID')} kata</span>
-                                ${isExisting ? '<span style="color: var(--success);">✓ Sudah tersimpan di database</span>' : '<span style="color: var(--warning);">⏳ Belum disimpan</span>'}
+                                ${isExisting && !isJsonDoc ? '<span style="color: var(--success);">✓ Sudah tersimpan di database</span>' : ''}
+                                ${isJsonDoc ? '<span style="color: var(--warning);">⚠️ Belum di database — edit & simpan untuk persist</span>' : ''}
+                                ${!isExisting && !isJsonDoc ? '<span style="color: var(--warning);">⏳ Belum disimpan</span>' : ''}
                             </div>
                         </div>
                         <div class="document-actions">
@@ -629,13 +654,17 @@
             editingIndex = index;
 
             // Update button text based on document type
-            if (doc.is_existing) {
+            const isJsonDoc = typeof doc.id === 'string' && doc.id.startsWith('json_');
+            if (doc.is_existing && !isJsonDoc) {
+                // Real DB document — update existing
                 document.getElementById('btn-add-doc').textContent = '💾 Update & Simpan ke Database';
-                document.getElementById('btn-add-doc').onclick = () => updateExistingDocument(index);
+            } else if (doc.is_existing && isJsonDoc) {
+                // JSON legacy doc — needs to be created in DB first
+                document.getElementById('btn-add-doc').textContent = '💾 Simpan ke Database';
             } else {
                 document.getElementById('btn-add-doc').textContent = '💾 Update Dokumen';
-                document.getElementById('btn-add-doc').onclick = addDocument;
             }
+            document.getElementById('btn-add-doc').onclick = doc.is_existing ? () => updateExistingDocument(index) : addDocument;
 
             updateDocumentList();
 
