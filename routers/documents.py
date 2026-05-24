@@ -99,18 +99,27 @@ async def create_manual_document(
                 json_project = JSONProject.get_project_by_id(document_data.project_id)
 
                 if json_project:
-                    # Create project in database from JSON data
-                    project = await ProjectRepository.create(
-                        session=session,
-                        name=json_project.name,
-                        description=json_project.description,
-                        num_topics=json_project.num_topics,
-                        document_count=0,
-                        coherence_score=json_project.coherence_score,
-                        created_by=json_project.created_by
-                    )
-                    await session.flush()
-                    print(f"Created project in database from JSON: {json_project.name} (ID: {project.id})")
+                    # Check if project with same name already exists in DB
+                    existing_project = await ProjectRepository.get_by_name(session, json_project.name)
+                    if existing_project:
+                        project = existing_project
+                        # Update document_data project_id to use the DB project ID
+                        document_data.project_id = project.id
+                        print(f"Using existing project in database: {project.name} (ID: {project.id})")
+                    else:
+                        # Create project in database from JSON data
+                        project = await ProjectRepository.create(
+                            session=session,
+                            name=json_project.name,
+                            description=json_project.description,
+                            num_topics=json_project.num_topics,
+                            document_count=0,
+                            coherence_score=json_project.coherence_score,
+                            created_by=json_project.created_by
+                        )
+                        await session.flush()
+                        document_data.project_id = project.id
+                        print(f"Created project in database from JSON: {json_project.name} (ID: {project.id})")
                 else:
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
@@ -203,18 +212,26 @@ async def create_manual_documents_bulk(
                 json_project = JSONProject.get_project_by_id(bulk_data.project_id)
 
                 if json_project:
-                    # Create project in database from JSON data
-                    project = await ProjectRepository.create(
-                        session=session,
-                        name=json_project.name,
-                        description=json_project.description,
-                        num_topics=json_project.num_topics,
-                        document_count=0,  # Will be updated after documents are created
-                        coherence_score=json_project.coherence_score,
-                        created_by=json_project.created_by
-                    )
-                    await session.flush()
-                    print(f"Created project in database from JSON: {json_project.name} (ID: {project.id})")
+                    # Check if project with same name already exists in DB
+                    existing_project = await ProjectRepository.get_by_name(session, json_project.name)
+                    if existing_project:
+                        project = existing_project
+                        bulk_data.project_id = project.id
+                        print(f"Using existing project in database: {project.name} (ID: {project.id})")
+                    else:
+                        # Create project in database from JSON data
+                        project = await ProjectRepository.create(
+                            session=session,
+                            name=json_project.name,
+                            description=json_project.description,
+                            num_topics=json_project.num_topics,
+                            document_count=0,  # Will be updated after documents are created
+                            coherence_score=json_project.coherence_score,
+                            created_by=json_project.created_by
+                        )
+                        await session.flush()
+                        bulk_data.project_id = project.id
+                        print(f"Created project in database from JSON: {json_project.name} (ID: {project.id})")
                 else:
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
