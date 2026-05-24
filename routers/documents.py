@@ -36,6 +36,12 @@ class ManualDocumentBulkCreate(BaseModel):
     project_id: Optional[int] = Field(None, description="Associated project ID (optional)")
 
 
+class ManualDocumentUpdate(BaseModel):
+    """Schema for updating a manual document"""
+    title: Optional[str] = Field(None, min_length=1, max_length=500, description="Document title")
+    content: Optional[str] = Field(None, min_length=1, description="Document content")
+
+
 class DocumentResponse(BaseModel):
     """Schema for document response"""
     id: int
@@ -408,8 +414,7 @@ async def delete_manual_document(
 @router.put("/manual/{document_id}", response_model=DocumentResponse)
 async def update_manual_document(
     document_id: int,
-    title: Optional[str] = None,
-    content: Optional[str] = None,
+    update_data: ManualDocumentUpdate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
@@ -418,8 +423,7 @@ async def update_manual_document(
 
     Args:
         document_id: ID of document to update
-        title: New title (optional)
-        content: New content (optional)
+        update_data: Fields to update (title, content)
         current_user: Authenticated user
         session: Database session
 
@@ -439,8 +443,8 @@ async def update_manual_document(
         updated_doc = await DocumentRepository.update(
             session=session,
             document_id=document_id,
-            title=title,
-            content=content
+            title=update_data.title,
+            content=update_data.content
         )
 
         if updated_doc:

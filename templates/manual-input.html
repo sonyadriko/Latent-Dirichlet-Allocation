@@ -450,13 +450,64 @@
             showAlert('Dokumen ditambahkan ke list', 'success');
         }
 
+        // Update existing document (saved in database)
+        async function updateExistingDocument(index) {
+            const doc = documentsBuffer[index];
+            const titleInput = document.getElementById('doc-title');
+            const contentInput = document.getElementById('doc-content');
+
+            const title = titleInput.value.trim();
+            const content = contentInput.value.trim();
+
+            if (!title || !content) {
+                showAlert('Judul dan isi dokumen wajib diisi!', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-add-doc');
+            const originalText = btn.textContent;
+
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<div class="spinner"></div> Menyimpan...';
+
+                const response = await apiRequest(`/api/documents/manual/${doc.id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ title, content })
+                });
+
+                if (response.id) {
+                    // Update local buffer
+                    documentsBuffer[index] = {
+                        ...documentsBuffer[index],
+                        title: response.title,
+                        content: response.content
+                    };
+
+                    clearForm();
+                    updateDocumentList();
+                    showAlert('Dokumen berhasil diupdate di database!', 'success');
+                } else {
+                    throw new Error(response.detail || 'Gagal mengupdate dokumen');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '➕ Tambah ke List';
+                btn.onclick = addDocument;
+            }
+        }
+
         // Clear form
         function clearForm() {
             document.getElementById('doc-title').value = '';
             document.getElementById('doc-content').value = '';
             document.getElementById('char-count').textContent = '0';
             editingIndex = null;
-            document.getElementById('btn-add-doc').textContent = '➕ Tambah ke List';
+            const btn = document.getElementById('btn-add-doc');
+            btn.textContent = '➕ Tambah ke List';
+            btn.onclick = addDocument;
         }
 
         // Update document list display
@@ -511,14 +562,16 @@
 
             documentsContainer.innerHTML = documentsBuffer.map((doc, index) => {
                 const isExisting = doc.is_existing === true;
+                const isEditing = editingIndex === index;
 
                 return `
-                <div class="document-item" style="${isExisting ? 'border-color: var(--success);' : ''}">
+                <div class="document-item" style="${isExisting ? 'border-color: var(--success);' : ''} ${isEditing ? 'border-color: var(--primary); box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);' : ''}">
                     <div class="document-item-header">
                         <div style="flex: 1;">
                             <div class="document-title">
                                 ${escapeHtml(doc.title)}
                                 ${isExisting ? '<span style="background: var(--success); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Tersimpan</span>' : '<span style="background: var(--warning); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Baru</span>'}
+                                ${isEditing ? '<span style="background: var(--primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">Sedang Diedit</span>' : ''}
                             </div>
                             <div class="document-preview">${escapeHtml(doc.content.substring(0, 200))}${doc.content.length > 200 ? '...' : ''}</div>
                             <div class="document-meta">
@@ -528,21 +581,12 @@
                             </div>
                         </div>
                         <div class="document-actions">
-                            ${!isExisting ? `
                             <button class="btn-sm btn-edit" onclick="editDocument(${index})" title="Edit">
                                 ✏️
                             </button>
-                            <button class="btn-sm btn-delete" onclick="deleteDocument(${index})" title="Hapus">
+                            <button class="btn-sm btn-delete" onclick="deleteDocument(${index})" title="${isExisting ? 'Hapus dari database' : 'Hapus'}">
                                 🗑️
                             </button>
-                            ` : `
-                            <button class="btn-sm" style="background: var(--text-muted); opacity: 0.5;" disabled title="Dokumen tersimpan tidak bisa diedit di sini">
-                                ✏️
-                            </button>
-                            <button class="btn-sm btn-delete" onclick="deleteDocument(${index})" title="Hapus dari database" style="background: var(--error);">
-                                🗑️
-                            </button>
-                            `}
                         </div>
                     </div>
                 </div>
@@ -556,7 +600,17 @@
             document.getElementById('doc-content').value = doc.content;
             document.getElementById('char-count').textContent = doc.content.length.toLocaleString('id-ID');
             editingIndex = index;
-            document.getElementById('btn-add-doc').textContent = '💾 Update Dokumen';
+
+            // Update button text based on document type
+            if (doc.is_existing) {
+                document.getElementById('btn-add-doc').textContent = '💾 Update & Simpan ke Database';
+                document.getElementById('btn-add-doc').onclick = () => updateExistingDocument(index);
+            } else {
+                document.getElementById('btn-add-doc').textContent = '💾 Update Dokumen';
+                document.getElementById('btn-add-doc').onclick = addDocument;
+            }
+
+            updateDocumentList();
 
             // Scroll to form
             document.querySelector('.input-form').scrollIntoView({ behavior: 'smooth' });
