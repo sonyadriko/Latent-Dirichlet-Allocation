@@ -387,18 +387,45 @@
                 console.log('Response from /api/projects/{id}/documents:', projectResponse);
 
                 if (projectResponse && projectResponse.success && projectResponse.data && projectResponse.data.documents && projectResponse.data.documents.length > 0) {
-                    // Documents found in JSON file
-                    documentsBuffer = projectResponse.data.documents.map((doc, index) => ({
-                        id: doc.id || `json_${index}`, // Use JSON id or create temp id
-                        title: doc.title || doc.judul || 'Untitled',
-                        content: doc.content || doc.content_preview || doc.isi || doc.snippet || '',
-                        created_at: doc.created_at || new Date().toISOString(),
-                        is_existing: true,
-                        is_json: true // Mark as from JSON file
-                    }));
+                    // Documents found in JSON file — migrate to DB for future edits
+                    const jsonDocs = projectResponse.data.documents;
+                    console.log(`Found ${jsonDocs.length} docs in JSON, saving to DB...`);
+
+                    const saveResponse = await apiRequest('/api/documents/manual/bulk', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            documents: jsonDocs.map(doc => ({
+                                title: doc.title || doc.judul || 'Untitled',
+                                content: doc.content || doc.content_preview || doc.isi || doc.snippet || ''
+                            })),
+                            project_id: parseInt(projectId)
+                        })
+                    });
+
+                    if (saveResponse.success && saveResponse.documents) {
+                        // Use saved docs (now have DB IDs)
+                        documentsBuffer = saveResponse.documents.map(doc => ({
+                            id: doc.id,
+                            title: doc.title || 'Untitled',
+                            content: doc.content || '',
+                            created_at: doc.created_at,
+                            is_existing: true
+                        }));
+                        showAlert(`${documentsBuffer.length} dokumen dimigrasi ke database`, 'success');
+                    } else {
+                        // Fallback: use JSON docs with temp IDs
+                        documentsBuffer = jsonDocs.map((doc, index) => ({
+                            id: `json_${index}`,
+                            title: doc.title || doc.judul || 'Untitled',
+                            content: doc.content || doc.content_preview || doc.isi || doc.snippet || '',
+                            created_at: doc.created_at || new Date().toISOString(),
+                            is_existing: true,
+                            is_json: true
+                        }));
+                        showAlert(`${documentsBuffer.length} dokumen dimuat dari JSON file (legacy)`, 'success');
+                    }
 
                     updateDocumentList();
-                    showAlert(`${documentsBuffer.length} dokumen dimuat dari JSON file (legacy)`, 'success');
                 } else {
                     showAlert('Project ini belum memiliki dokumen', 'info');
                     documentsBuffer = [];
@@ -896,16 +923,14 @@
 
                 console.log('Documents response:', docsResponse);
 
-                // Check response format
+                // Check response format - API returns { documents: [...], total: N }
                 let documents = [];
-                if (docsResponse.success && docsResponse.documents) {
+                if (docsResponse.documents && Array.isArray(docsResponse.documents)) {
                     documents = docsResponse.documents;
-                } else if (Array.isArray(docsResponse)) {
-                    // Handle if response is directly an array
-                    documents = docsResponse;
-                } else if (docsResponse.data && Array.isArray(docsResponse.data)) {
-                    // Handle if documents are in data field
+                } else if (docsResponse.success && docsResponse.data && Array.isArray(docsResponse.data)) {
                     documents = docsResponse.data;
+                } else if (Array.isArray(docsResponse)) {
+                    documents = docsResponse;
                 }
 
                 // If no documents in database, try loading from JSON (legacy)
