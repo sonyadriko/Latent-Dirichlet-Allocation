@@ -244,7 +244,7 @@ class ProjectRepository:
             .order_by(Project.created_at.desc())
             .limit(5)
         )
-        recent_projects = list(result.scalars().all())
+        recent_projects = list(recent_result.scalars().all())
 
         return {
             "total_projects": total_projects,

@@ -6,10 +6,19 @@ class Config:
     DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
     RESULTS_DIR = os.path.join(DATA_DIR, 'results')
 
-    # Database Configuration (SQLite for single-container deployment)
-    DATABASE_URL = os.environ.get(
-        'DATABASE_URL',
-        'sqlite+aiosqlite:///' + os.path.join(DATA_DIR, 'lda_app.db')
+    # Database Configuration (external MySQL)
+    # An explicit DATABASE_URL always wins; otherwise it is composed from the
+    # individual MYSQL_* env vars. charset=utf8mb4 is REQUIRED so multibyte
+    # content (curly quotes, etc.) is stored correctly.
+    MYSQL_HOST = os.environ.get('MYSQL_HOST', 'localhost')
+    MYSQL_PORT = os.environ.get('MYSQL_PORT', '3306')
+    MYSQL_USER = os.environ.get('MYSQL_USER', 'root')
+    MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD', '')
+    MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE', 'lda_app')
+
+    DATABASE_URL = os.environ.get('DATABASE_URL') or (
+        f"mysql+aiomysql://{MYSQL_USER}:{MYSQL_PASSWORD}"
+        f"@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}?charset=utf8mb4"
     )
 
     # LDA Configuration

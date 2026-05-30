@@ -3,14 +3,23 @@ Authentication router for FastAPI
 Handles user registration, login, token verification, and logout
 """
 from fastapi import APIRouter, Request, Depends
-from models.user import User
-from core.security import create_access_token, get_current_user
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.database import get_session
+from core.security import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
+from models.db_models import User
+from repositories.user_repository import UserRepository
 
 router = APIRouter()
 
 
 @router.post("/register")
-async def register(request: Request):
+async def register(request: Request, session: AsyncSession = Depends(get_session)):
     """
     Register a new user
 
@@ -38,14 +47,19 @@ async def register(request: Request):
             'message': 'Password minimal 6 karakter'
         }
 
-    # Create user
-    user, error = User.create(name, email, password)
-
-    if error:
+    # Reject duplicate emails
+    if await UserRepository.email_exists(session, email):
         return {
             'success': False,
-            'message': error
+            'message': 'Email sudah terdaftar'
         }
+
+    user = await UserRepository.create(
+        session=session,
+        name=name,
+        email=email,
+        password_hash=hash_password(password)
+    )
 
     return {
         'success': True,
@@ -55,7 +69,7 @@ async def register(request: Request):
 
 
 @router.post("/login")
-async def login(request: Request):
+async def login(request: Request, session: AsyncSession = Depends(get_session)):
     """
     User login
 
@@ -76,9 +90,9 @@ async def login(request: Request):
             'message': 'Email dan password harus diisi'
         }
 
-    user = User.find_by_email(email)
+    user = await UserRepository.get_by_email_with_password(session, email)
 
-    if not user or not user.check_password(password):
+    if not user or not verify_password(password, user.password_hash):
         return {
             'success': False,
             'message': 'Email atau password salah'

@@ -6,19 +6,25 @@ import json
 import os
 from typing import Optional
 from fastapi import APIRouter, Request, Depends, UploadFile, File, Form
+from sqlalchemy.ext.asyncio import AsyncSession
 from config import Config
 from services.preprocessing import TextPreprocessor
-from services.lda_service import LDAService
+from services.lda_singleton import get_lda_service
 from services.crawler import CrawlerService
 from core.security import get_current_user
+from core.database import get_session
 from core.state import kdd_state_manager, PipelineStatus
-from models.user import User
+from models.db_models import User
+from repositories.project_repository import ProjectRepository
+from repositories.document_repository import DocumentRepository
+from repositories.pipeline_repository import PipelineRepository
+from schemas.pipeline import PipelineStatus as RunStatus
 
 router = APIRouter()
 
 # Initialize services
 preprocessor = TextPreprocessor()
-lda_service = LDAService()
+lda_service = get_lda_service()  # shared singleton across routers
 crawler_service = CrawlerService()
 
 
@@ -46,7 +52,8 @@ async def crawl(
     current_user: User = Depends(get_current_user),
     project_name: str = Form(...),
     file: UploadFile = File(...),
-    num_topics: int = Form(default=Config.NUM_TOPICS)
+    num_topics: int = Form(default=Config.NUM_TOPICS),
+    session: AsyncSession = Depends(get_session)
 ):
     """Full KDD Pipeline: Crawl, Preprocess, Transform, and LDA Analysis"""
     project_name = project_name.strip()
@@ -169,18 +176,86 @@ async def crawl(
             }
         }
 
-        # Save results
+        # Save the current-session results cache (used by /results + visualization)
         results_file = os.path.join(Config.RESULTS_DIR, 'lda_results.json')
         lda_service.save_results(lda_results, results_file)
 
-        # Save project data
-        project_file = os.path.join(Config.RESULTS_DIR, f'{project_name}_data.json')
-        with open(project_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                'project_name': project_name,
-                'crawled_data': crawl_results['success'],
-                'preprocessed_data': preprocessed_data
-            }, f, indent=2, ensure_ascii=False)
+        # Persist the Gensim model + artifacts to the project folder on disk
+        doc_count = len(preprocessed_data)
+        documents_data = [
+            {
+                'id': d['id'],
+                'title': d['title'],
+                'content': d['original'],
+                'url': d.get('url', ''),
+                'tokens_count': len(d['tokens'])
+            }
+            for d in preprocessed_data
+        ]
+        model_path = lda_service.save_project_model(
+            project_name=project_name,
+            coherence_score=coherence,
+            doc_count=doc_count,
+            num_topics=num_topics,
+            source_urls=urls,
+            documents_data=documents_data
+        )
+
+        # ===== Persist to MySQL (single source of truth) =====
+        project = await ProjectRepository.get_by_name(session, project_name)
+        if project:
+            await ProjectRepository.update(
+                session,
+                project.id,
+                num_topics=num_topics,
+                document_count=doc_count,
+                coherence_score=coherence,
+                model_path=model_path,
+                status='active'
+            )
+            # Re-crawl overwrites the project's documents
+            await DocumentRepository.delete_by_project(session, project.id)
+        else:
+            project = await ProjectRepository.create(
+                session=session,
+                name=project_name,
+                description=f"LDA model with {num_topics} topics on {doc_count} documents",
+                num_topics=num_topics,
+                document_count=doc_count,
+                coherence_score=coherence,
+                model_path=model_path,
+                created_by=current_user.id
+            )
+
+        await DocumentRepository.create_bulk(
+            session=session,
+            documents=[
+                {
+                    'title': d['title'],
+                    'content': d['content'],
+                    'url': d['url'],
+                    'tokens_count': d['tokens_count']
+                }
+                for d in documents_data
+            ],
+            project_id=project.id
+        )
+
+        # Record the pipeline run for history
+        run = await PipelineRepository.create(
+            session=session,
+            project_id=project.id,
+            user_id=current_user.id,
+            num_topics=num_topics,
+            total_urls=crawl_results['total']
+        )
+        await PipelineRepository.update_crawl_results(
+            session, run.id,
+            total_urls=crawl_results['total'],
+            success_count=crawl_results['success_count'],
+            failed_count=crawl_results['failed_count']
+        )
+        await PipelineRepository.update_status(session, run.id, RunStatus.completed)
 
         await kdd_state_manager.set('lda_results', lda_results)
         await kdd_state_manager.update_status('datamining', PipelineStatus.completed)
@@ -190,6 +265,7 @@ async def crawl(
             'message': f'Proses KDD selesai! {crawl_results["success_count"]} berita berhasil dianalisis.',
             'data': {
                 'project_name': project_name,
+                'project_id': project.id,
                 'crawl_stats': lda_results['crawl_stats'],
                 'num_topics': num_topics,
                 'topics': topics

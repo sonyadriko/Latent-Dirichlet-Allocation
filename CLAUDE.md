@@ -4,276 +4,100 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-**Python Version:** 3.12+ (Dockerfile uses python:3.12-slim)
+**Python Version:** 3.12+
 
-### Docker Deployment (Recommended)
+### Docker (Recommended)
 ```bash
-# Build and run with Docker Compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the container
-docker-compose down
-
-# Rebuild after code changes
-docker-compose up -d --build
-
-# Check container status
-docker-compose ps
+docker-compose up -d            # Start
+docker-compose up -d --build    # Rebuild after code changes
+docker-compose logs -f          # View logs
+docker-compose down             # Stop
 ```
-
-**Application URLs:**
-- Frontend: `http://localhost:3030`
-- Backend API: `http://localhost:3030/api/*`
-- Swagger UI (API Documentation): `http://localhost:3030/docs`
-- ReDoc: `http://localhost:3030/redoc`
-- Health Check: `http://localhost:3030/api/health`
 
 ### Local Development
 ```bash
-# Create and activate virtual environment (if not exists)
-python3.12 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+python3.12 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# Download required NLTK data (first time setup)
 python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
-
-# Run the FastAPI application with uvicorn
 uvicorn app:app --host 0.0.0.0 --port 3030 --reload
 ```
 
+**URLs:** Frontend `http://localhost:3030` · API docs `http://localhost:3030/docs` · Health `http://localhost:3030/api/health`
+
 ### Utility Scripts
 ```bash
-# Re-crawl a project to get full content (use with caution - overwrites data)
-python scripts/recrawl_project.py <project_id>
-
-# Migrate legacy JSON data to SQLite database
-python scripts/migrate_json_to_db.py
+python scripts/recrawl_project.py <project_id>     # Re-crawl a project (overwrites data)
+python scripts/migrate_json_to_mysql.py            # One-time: legacy JSON/SQLite -> MySQL
 ```
 
-## Architecture Overview
+**Database setup:** the app uses an **external MySQL** server. Copy `.env.example` to `.env` and fill in `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE` (or a full `DATABASE_URL`). The target schema must exist and the user needs CREATE privileges (tables are auto-created at startup). `charset=utf8mb4` is required.
 
-This is a **FastAPI-based web application** for **LDA (Latent Dirichlet Allocation) Topic Modeling** focused on Indonesian business news analysis. The application implements a complete KDD (Knowledge Discovery in Databases) pipeline with a modern layered architecture.
+## Architecture
 
-**Migration Note:** The application was migrated from Flask to FastAPI for better async support, type safety, and automatic API documentation. The legacy `routes/` directory contains old Flask code and is no longer used.
+FastAPI app for LDA topic modeling on Indonesian business news, implementing a KDD (Knowledge Discovery in Databases) pipeline.
 
-### Layered Architecture
+**No test suite exists.** Verify changes by running the app.
 
-The codebase follows a clean, layered architecture pattern:
-
+### Layer structure
 ```
-app.py                    # FastAPI application entry point
-├── routers/             # API route handlers (FastAPI)
-├── services/            # Business logic layer
-├── repositories/        # Data access layer (SQLAlchemy)
-├── schemas/             # Pydantic validation schemas
-├── models/              # Database models and domain models
-├── core/                # Core utilities (database, security, exceptions)
-├── templates/           # Jinja2 HTML templates
-├── static/              # CSS, JavaScript, assets
-├── scripts/             # Utility scripts (migration, re-crawling)
-└── data/                # Data storage (SQLite + JSON files)
+app.py          → FastAPI entry point, lifespan init, router registration
+routers/        → HTTP handlers (thin: validate input, call services, return response)
+services/       → Business logic (LDA, crawling, preprocessing, search, pyLDAvis)
+repositories/   → Async SQLAlchemy queries (project, document, user, pipeline)
+schemas/        → Pydantic request/response models
+models/         → db_models.py (SQLAlchemy ORM). user.py/project.py/document.py are LEGACY JSON models, no longer wired in
+core/           → database.py, security.py, state.py, exceptions.py, error_handlers.py
 ```
 
-**Key Architectural Patterns:**
-- **Repository Pattern**: `repositories/` abstracts database operations
-- **Service Layer**: `services/` contains business logic (LDA, crawling, search)
-- **Singleton Pattern**: `lda_singleton.py` ensures one LDA service instance across routers
-- **Dependency Injection**: FastAPI's `Depends()` for auth and database sessions
+`routes/` — legacy Flask code, **not used**, ignore it.
 
-### Core Components
+### Single source of truth: MySQL
 
-**FastAPI Application** (`app.py`):
-- Lifespan context manager for startup/shutdown events
-- CORS middleware configuration
-- Router registration (`/api/auth`, `/api/kdd`, `/api/search`, `/api/projects`, `/api/documents`)
-- Static files and Jinja2 templates setup
-- Page routes (`/`, `/login`, `/register`, `/admin`, `/visualization`, `/projects`, `/manual-input`)
+All persistent data (users, projects, documents, pipeline runs) lives in **MySQL** via SQLAlchemy ORM (`models/db_models.py`) and the repositories. The old JSON files (`data/users.json`, `data/projects.json`) and SQLite (`data/lda_app.db`) are **deprecated backups** — the JSON model classes (`models/user.py`, `models/project.py`, `models/document.py`) are no longer imported by routers or services. Do all data access through the repositories.
 
-### KDD Pipeline Implementation
+### Critical architectural quirks
 
-The application implements a 4-step KDD process:
+**Sync/async boundary with the LDA service:** `services/lda_service.py` is **synchronous** and does **pure filesystem/Gensim work only** (no DB access). All DB writes happen in the async route handlers. When a router needs to load/train a model, it fetches the project + documents from MySQL and passes them into `lda_service.load_project_model(project_name, project_id, document_count, documents)` / `save_project_model(...)`. **Never call a repository from inside `lda_service`.**
 
-1. **Crawling** (`services/crawler.py`, `services/online_crawler.py`):
-   - Extracts content from news URLs using BeautifulSoup
-   - Supports Indonesian news websites
-   - Handles file upload with multiple URLs
-   - Online document crawling for adding documents to existing projects
+**Pipeline in-memory state:** `core/state.py` exports a global `kdd_state_manager` (async lock-protected dict) holding transient live-progress state. Persistent run history is in the `PipelineRun` table. `kdd_state_manager` resets on restart.
 
-2. **Preprocessing** (`services/preprocessing.py`):
-   - Indonesian text preprocessing using Sastrawi stemmer
-   - NLTK tokenization and stopwords removal
-   - Case folding, punctuation removal, and cleaning
+**LDA singleton:** `services/lda_singleton.py` provides `get_lda_service()` for a shared `LDAService` instance. All routers (`kdd`, `project`, `search`) use this singleton, so the currently-loaded project/model is shared across them.
 
-3. **Transformation** (`services/lda_service.py`):
-   - Bag-of-words conversion using Gensim
-   - Dictionary and corpus creation
-   - Document-term matrix generation
+**Gensim model files stay on disk:** trained models are saved under `data/results/{project_name_slug}/` (`lda_model_model`, `lda_model_dict`, `lda_model_mm`, plus `documents.json`). The DB stores only the `model_path`. The LDA service loads them by project **name** (slugified), so the `./data` volume must persist.
 
-4. **Data Mining** (`services/lda_service.py`):
-   - LDA model training with Gensim
-   - Topic extraction and coherence calculation
-   - Document-topic distribution analysis
+### KDD Pipeline (4 stages)
 
-### Key Services
+1. **Crawl** — `services/crawler.py` scrapes URLs from an uploaded `.txt` file via BeautifulSoup
+2. **Preprocess** — `services/preprocessing.py` runs Sastrawi stemming + NLTK Indonesian stopwords
+3. **Transform** — `services/lda_service.py` builds Gensim BoW dictionary and corpus
+4. **Mine** — `services/lda_service.py` trains `LdaModel`; results saved to DB + disk
 
-**LDAService** (`services/lda_service.py`):
-- Core topic modeling functionality
-- Gensim-based LDA implementation
-- Model persistence and results serialization
-- Dictionary and corpus management for projects
-- **Singleton Pattern**: Use `get_lda_service()` from `lda_singleton.py` to ensure all routers use the same instance
+Online document addition (existing project) uses `services/online_crawler.py`.
 
-**SearchService** (`services/search_service.py`):
-- Document search with hybrid text matching (title + content)
-- Topic-based document similarity using cosine similarity
-- Fuzzy matching with configurable thresholds
-- Online document crawling integration
-- Training mode to rebuild corpus from project documents
+### Database
 
-**PyLDAvisService** (`services/pyldavis_service.py`):
-- Generates interactive LDA visualization with pyLDAvis
-- HTML-based visualization export
-- Per-project visualization data
+Async SQLAlchemy 2.0 + aiomysql (external MySQL). Session dependency: `get_session` (from `core/database.py`) — use with `Depends(get_session)`. Tables auto-created at startup via `init_database()`. Alembic is installed but no migrations exist; schema changes require `alembic revision --autogenerate`.
 
-**TextPreprocessor** (`services/preprocessing.py`):
-- Indonesian text processing pipeline
-- Combines NLTK and Sastrawi for comprehensive preprocessing
-- Specialized handling for Indonesian language patterns
+DB models: `User`, `Project`, `Document`, `PipelineRun` (all in `models/db_models.py`).
 
-**CrawlerService** (`services/crawler.py`):
-- Web scraping with BeautifulSoup and requests
-- Intelligent content extraction for news articles
-- Error handling and rate limiting
+### Authentication
 
-**OnlineDocumentCrawler** (`services/online_crawler.py`):
-- Crawls individual URLs to add documents to existing projects
-- Preprocesses and integrates with project corpus
+JWT (python-jose, HS256, 24h expiry). Protected endpoints use `Depends(get_current_user)`. Token sent as `Authorization: Bearer <token>` from the frontend (stored in localStorage). `get_current_user_optional` returns `None` instead of 401 when no token present.
 
-### Database Layer
+### Configuration (`config.py`)
 
-**Async SQLAlchemy** (`core/database.py`):
-- SQLAlchemy 2.0 with async support
-- SQLite database with aiosqlite
-- Declarative base for model definitions
-- Session management with `get_db_session()` dependency
+All values overridable via environment variables:
+- `SECRET_KEY`, `JWT_SECRET_KEY`
+- `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE` — composed into a `mysql+aiomysql://...?charset=utf8mb4` URL. An explicit `DATABASE_URL` overrides them.
+- LDA defaults: `NUM_TOPICS=5`, `NUM_WORDS_PER_TOPIC=10`, `PASSES=15`, `ITERATIONS=100`
 
-**Repository Pattern** (`repositories/`):
-- `project_repository.py` - Project CRUD and queries
-- `document_repository.py` - Document management
-- `user_repository.py` - User authentication data
-- `pipeline_repository.py` - KDD pipeline state management
+### Adding new endpoints
 
-**Database Models** (`models/db_models.py`):
-- `User` - User accounts with hashed passwords
-- `Project` - LDA project metadata
-- `Document` - News articles and content
-- `PipelineRun` - KDD pipeline execution history
-
-### API Structure
-
-FastAPI routers with automatic OpenAPI documentation:
-
-- `/api/auth/*` - JWT-based user authentication endpoints
-- `/api/kdd/*` - KDD pipeline management endpoints
-- `/api/search/*` - Document search and similarity endpoints
-- `/api/projects/*` - Project CRUD and management endpoints
-- `/api/documents/*` - Document management endpoints
-- `/api/health` - Health check endpoint
-
-**Authentication:**
-- JWT-based authentication using `python-jose`
-- Bearer token required for protected endpoints
-- `get_current_user()` dependency for token validation
-- Token stored in HTTP-only cookies and localStorage
-
-**Page Routes:**
-- `/` - Main landing page
-- `/login`, `/register` - Authentication pages
-- `/admin` - Admin dashboard with KDD pipeline controls
-- `/visualization` - Topic visualization with pyLDAvis
-- `/projects` - Project management page (list, delete, switch)
-- `/manual-input` - Manual document input page
-
-### Configuration
-
-LDA parameters are configurable in `config.py`:
-- `NUM_TOPICS` - Default number of topics (5)
-- `NUM_WORDS_PER_TOPIC` - Words displayed per topic (10)
-- `PASSES` - LDA training passes (15)
-- `ITERATIONS` - LDA training iterations (100)
-- `DATABASE_URL` - SQLite database connection string
-- `SECRET_KEY` - Application secret key
-- `JWT_SECRET_KEY` - JWT token signing key
-
-Environment variables can override these settings via Docker Compose or `.env` file.
-
-### Data Storage
-
-The application uses a hybrid storage approach:
-
-**SQLite Database** (via SQLAlchemy):
-- `data/lda_app.db` - User accounts, projects, documents, pipeline state
-- Async operations with aiosqlite
-- Declarative models for type-safe queries
-
-**JSON Files** (legacy, being phased out):
-- `data/users.json` - User accounts (deprecated)
-- `data/news.json` - Sample news data
-- `data/results/lda_results.json` - Current analysis results (deprecated)
-
-**Model Persistence:**
-- Gensim LDA models saved as `.model` files in `data/results/`
-- Dictionary and corpus saved separately as `.dict` and `.mm` files
-- Models organized by project: `data/results/{project_name}_*`
+1. Schema in `schemas/` (or inline on the router if simple)
+2. Repository method in `repositories/` for DB access
+3. Route in `routers/` using `Depends(get_session)` and `Depends(get_current_user)`
+4. Raise typed exceptions from `core/exceptions.py` (`NotFoundException`, `ValidationException`, etc.)
 
 ### Frontend
 
-Single-page application with Jinja2 templates and vanilla JavaScript:
-- User authentication interface
-- File upload for URL crawling
-- Real-time KDD pipeline progress tracking
-- Topic visualization and analysis results
-- Project management (list, delete, switch projects)
-- Manual document input interface
-
-### Indonesian NLP Stack
-
-The application uses specialized Indonesian language processing:
-- **Sastrawi** - Indonesian stemmer for word root extraction
-- **NLTK Indonesian stopwords** - Common Indonesian stopword removal
-- Custom preprocessing patterns for Indonesian text patterns
-
-### Development Patterns
-
-**Adding New Endpoints:**
-1. Create Pydantic schemas in `schemas/` for request/response validation
-2. Add repository methods in `repositories/` for database operations
-3. Create route handlers in `routers/` with FastAPI decorators
-4. Use `Depends(get_db_session)` for database access
-5. Use `Depends(get_current_user)` for authenticated endpoints
-
-**Working with LDA Service:**
-- Always use `get_lda_service()` from `services/lda_singleton.py`
-- This ensures project state consistency across all routers
-- The singleton loads the current project's model and corpus automatically
-
-**Error Handling:**
-- Custom exceptions in `core/exceptions.py`
-- Global error handlers registered in `core/error_handlers.py`
-- FastAPI automatically generates error responses
-
-**Database Migrations:**
-- Alembic is installed for database migrations
-- Migration scripts would go in `alembic/` directory
-- Use `alembic revision --autogenerate -m "description"` for schema changes
-
-**JSON to SQLite Migration:**
-- Use `scripts/migrate_json_to_db.py` to migrate existing JSON data to SQLite
-- Run: `python scripts/migrate_json_to_db.py` (from project root)
-- Preserves users, projects, and pipeline results from legacy JSON files
+Vanilla JS + Jinja2 templates. Each page (`admin.html`, `projects.html`, `manual-input.html`, `visualization.html`) has a corresponding JS file in `static/js/`. Auth state lives in `localStorage`; the frontend sends Bearer tokens on API calls. `sidebar.js` is shared across pages.

@@ -7,10 +7,20 @@ services:
     ports:
       - "3030:3030"
     volumes:
+      # Persists Gensim model artifacts under data/results/
       - ./data:/app/data
+    env_file:
+      - .env
     environment:
       - SECRET_KEY=${SECRET_KEY:-lda-secret-key-2024}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-jwt-secret-key-lda-2024}
+      # External MySQL connection (override via .env)
+      - MYSQL_HOST=${MYSQL_HOST:-localhost}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-lda_app}
+      - DATABASE_URL=${DATABASE_URL:-}
     restart: unless-stopped
     networks:
       - lda-network

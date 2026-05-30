@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import StaticPool
 
 import logging
 
@@ -35,10 +34,10 @@ def get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             Config.DATABASE_URL,
             echo=False,  # Set to True for SQL query logging
-            poolclass=StaticPool,  # SQLite doesn't need connection pooling
-            connect_args={"check_same_thread": False}  # Needed for SQLite
+            pool_pre_ping=True,   # validate connections before use (external server)
+            pool_recycle=3600,    # recycle connections hourly to avoid MySQL timeouts
         )
-        logger.info(f"Database engine created: {Config.DATABASE_URL}")
+        logger.info("Database engine created for MySQL backend")
     return _engine
 
 
@@ -109,13 +108,10 @@ async def init_database():
     Initialize the database by creating all tables.
 
     This should be called on application startup.
+
+    Requires the MySQL schema/database to already exist and the configured
+    user to have CREATE privileges on it.
     """
-    from config import Config
-
-    # Ensure data directory exists
-    import os
-    os.makedirs(os.path.dirname(Config.DATABASE_URL.replace("sqlite+aiosqlite:///", "")), exist_ok=True)
-
     engine = get_engine()
     async with engine.begin() as conn:
         # Import all models here to ensure they're registered with Base

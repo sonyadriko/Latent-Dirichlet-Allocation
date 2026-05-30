@@ -804,7 +804,7 @@ https://www.cnnindonesia.com/berita-3
             <section class="project-management">
                 <div class="project-header-actions">
                     <h2>📁 Project Management</h2>
-                    <button class="btn-refresh" onclick="loadProjects()">
+                    <button class="btn-refresh" onclick="loadProjectsTable()">
                         🔄 Refresh
                     </button>
                 </div>
@@ -867,7 +867,8 @@ https://www.cnnindonesia.com/berita-3
                 instructionsManual.classList.add('hidden');
             }
 
-            loadProjects();
+            loadProjects();        // populate dropdown
+            loadProjectsTable();   // populate management table
             setupFileUpload();
         });
 
@@ -1109,6 +1110,7 @@ https://www.cnnindonesia.com/berita-3
                     if (response.data.project_name) {
                         setTimeout(() => {
                             loadProjects();
+                            loadProjectsTable();
                             document.getElementById('new-project-name').value = '';
                             document.getElementById('new-project-description').value = '';
                             document.getElementById('project-select').value = '';
@@ -1431,6 +1433,7 @@ https://www.cnnindonesia.com/berita-3
                     if (response.data.project_name) {
                         setTimeout(() => {
                             loadProjects();
+                            loadProjectsTable();
                             // Reset form
                             document.getElementById('new-project-name').value = '';
                             document.getElementById('new-project-description').value = '';
@@ -1574,8 +1577,8 @@ https://www.cnnindonesia.com/berita-3
 
         // ==================== Project Management Functions ====================
 
-        // Load projects for the project management section
-        async function loadProjects() {
+        // Load projects for the project management table (bottom section)
+        async function loadProjectsTable() {
             const container = document.getElementById('projects-table');
 
             try {

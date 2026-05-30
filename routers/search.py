@@ -4,14 +4,15 @@ Handles document search, similarity, and LDA training
 """
 from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
-from models.document import Document
-from models.project import Project
+from sqlalchemy.ext.asyncio import AsyncSession
 from services.search_service import SearchService
-from services.lda_service import LDAService
 from services.lda_singleton import get_lda_service
 from services.online_crawler import OnlineDocumentCrawler
 from core.security import get_current_user
-from models.user import User
+from core.database import get_session
+from models.db_models import User
+from repositories.project_repository import ProjectRepository
+from repositories.document_repository import DocumentRepository
 import numpy as np
 
 router = APIRouter()
@@ -29,6 +30,29 @@ def get_search_service():
     if search_service is None:
         search_service = SearchService(lda_service)
     return search_service
+
+
+async def _load_latest_project_model(session: AsyncSession) -> tuple[bool, str]:
+    """
+    Load the most recently created active project's model into the LDA service,
+    pulling its documents from the database to rebuild the corpus when needed.
+    """
+    projects = await ProjectRepository.list_projects(session, status="active", limit=1)
+    if not projects:
+        return False, "No projects available"
+
+    project = projects[0]  # list_projects orders by created_at desc
+    documents = await DocumentRepository.list_documents(session, project_id=project.id, limit=10000)
+    docs_data = [
+        {"id": d.id, "title": d.title, "content": d.content, "url": d.url}
+        for d in documents
+    ]
+    return lda_service.load_project_model(
+        project_name=project.name,
+        project_id=project.id,
+        document_count=project.document_count,
+        documents=docs_data,
+    )
 
 
 def convert_numpy_types(obj):
@@ -75,12 +99,16 @@ async def search_documents(
             results['online_documents'] = online_results
             results['online_count'] = len(online_results)
 
-            # Try to find online documents locally
+            # Try to find online documents within the loaded project's documents
+            project_docs = lda_service.current_project_documents or []
             online_local_matches = []
             for online_doc in online_results:
-                local_matches = Document.search_by_title(online_doc['title'])
-                if local_matches:
-                    online_local_matches.extend([doc.to_dict() for doc in local_matches])
+                title_q = (online_doc.get('title') or '').lower()
+                if not title_q:
+                    continue
+                for d in project_docs:
+                    if title_q in (d.get('title', '') or '').lower():
+                        online_local_matches.append(d)
 
             if online_local_matches:
                 results['online_local_matches'] = online_local_matches
@@ -210,7 +238,11 @@ async def add_online_documents(request: Request, current_user: User = Depends(ge
 
 
 @router.post("/train")
-async def train_lda_model(request: Request, current_user: User = Depends(get_current_user)):
+async def train_lda_model(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
     """Train LDA model on documents"""
     data = await request.json()
     num_topics = data.get('num_topics', 5)
@@ -249,8 +281,8 @@ async def train_lda_model(request: Request, current_user: User = Depends(get_cur
             doc.url = doc_data.get('url', '')
             documents.append(doc)
     else:
-        # Fallback: load all documents from collection
-        documents = Document.get_all_documents()
+        # No documents provided and no project loaded
+        documents = []
 
     if len(documents) < num_topics:
         return {
@@ -259,7 +291,7 @@ async def train_lda_model(request: Request, current_user: User = Depends(get_cur
         }
 
     try:
-        # Train LDA model with project saving
+        # Train LDA model with project saving (writes Gensim model to disk)
         results = lda_service.train_on_documents(
             documents,
             num_topics=num_topics,
@@ -270,9 +302,44 @@ async def train_lda_model(request: Request, current_user: User = Depends(get_cur
         # Initialize search service after training
         get_search_service()
 
-        # Add project info to response if project was created
+        # Persist the project + documents to MySQL (single source of truth)
         if project_name:
             results['project_name'] = project_name
+            coherence = results.get('coherence_score', 0.0)
+            model_path = results.get('model_path')
+            doc_count = len(documents)
+
+            project = await ProjectRepository.get_by_name(session, project_name)
+            if project:
+                await ProjectRepository.update(
+                    session, project.id,
+                    num_topics=num_topics, document_count=doc_count,
+                    coherence_score=coherence, model_path=model_path, status='active'
+                )
+                await DocumentRepository.delete_by_project(session, project.id)
+            else:
+                project = await ProjectRepository.create(
+                    session=session, name=project_name,
+                    description=project_description or f"LDA model with {num_topics} topics",
+                    num_topics=num_topics, document_count=doc_count,
+                    coherence_score=coherence, model_path=model_path,
+                    created_by=current_user.id
+                )
+
+            await DocumentRepository.create_bulk(
+                session=session,
+                documents=[
+                    {
+                        'title': getattr(d, 'title', 'Untitled'),
+                        'content': getattr(d, 'content', ''),
+                        'url': getattr(d, 'url', None),
+                    }
+                    for d in documents
+                ],
+                project_id=project.id
+            )
+            await session.commit()
+            results['project_id'] = project.id
 
         return {
             'success': True,
@@ -315,29 +382,16 @@ async def find_similar_documents(
 
 
 @router.get("/topics")
-async def get_document_topics():
+async def get_document_topics(session: AsyncSession = Depends(get_session)):
     """Get topic distribution for all documents"""
     try:
-        # Check if model is trained first (before checking global documents)
+        # Check if model is trained first
         if not lda_service.lda_model:
-            # Try to load from existing project
-            projects = Project.get_all_projects()
-
-            if not projects:
-                return {
-                    'success': False,
-                    'message': 'LDA model not trained yet. Please train the model first.'
-                }
-
-            # Load the most recent project
-            latest_project = max(projects, key=lambda p: p.created_at)
-            print(f"Auto-loading most recent project: {latest_project.name} (ID: {latest_project.id})")
-            success, message = lda_service.load_project_model(project_id=latest_project.id)
-
+            success, message = await _load_latest_project_model(session)
             if not success:
                 return {
                     'success': False,
-                    'message': f'Failed to load model: {message}'
+                    'message': f'LDA model not trained yet. {message}'
                 }
             print(f"Project loaded successfully: {message}")
 
@@ -401,27 +455,23 @@ async def get_document_topics():
 
 
 @router.get("/model-status")
-async def get_model_status():
+async def get_model_status(session: AsyncSession = Depends(get_session)):
     """Check if LDA model is trained and ready"""
     try:
         is_trained = lda_service.lda_model is not None
 
         # Auto-load most recent project if model is not trained
         if not is_trained:
-            projects = Project.get_all_projects()
-            if projects:
-                latest_project = max(projects, key=lambda p: p.created_at)
-                print(f"Auto-loading project in model-status: {latest_project.name}")
-                success, message = lda_service.load_project_model(project_id=latest_project.id)
-                if success:
-                    is_trained = True
-                    print(f"Project loaded: {message}")
+            success, message = await _load_latest_project_model(session)
+            if success:
+                is_trained = True
+                print(f"Project loaded: {message}")
 
-        # Use current project's document count if available, otherwise fall back to total
-        if hasattr(lda_service, 'current_project_doc_count') and lda_service.current_project_doc_count > 0:
+        # Use current project's document count if available, otherwise total DB count
+        if getattr(lda_service, 'current_project_doc_count', 0) > 0:
             document_count = lda_service.current_project_doc_count
         else:
-            document_count = len(Document.get_all_documents())
+            document_count = await DocumentRepository.count(session)
 
         return {
             'success': True,

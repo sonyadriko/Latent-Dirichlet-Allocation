@@ -1,93 +1,117 @@
 """
-Script untuk re-crawl project yang sudah ada untuk mendapatkan konten lengkap
-Gunakan dengan hati-hati - akan menimpa data yang ada
+Re-crawl semua URL sumber sebuah project untuk memperbarui konten dokumen.
+Data lama diganti dengan hasil crawl terbaru.
+
+Usage (dari project root):
+    python scripts/recrawl_project.py <project_id>
 """
-import json
 import sys
 import os
+import asyncio
 
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.crawler import CrawlerService
+from core.database import get_session_maker, init_database, close_database
+from repositories.project_repository import ProjectRepository
+from repositories.document_repository import DocumentRepository
 
-def recrawl_project(project_id):
-    """Re-crawl semua URL dalam project untuk mendapatkan konten lengkap"""
 
-    # Load projects
-    projects_file = 'data/projects.json'
-    with open(projects_file, 'r', encoding='utf-8') as f:
-        projects = json.load(f)
-
-    # Find project
-    project = None
-    project_index = -1
-    for i, p in enumerate(projects):
-        if p['id'] == project_id and p.get('status') == 'active':
-            project = p
-            project_index = i
-            break
-
-    if not project:
-        print(f"Project dengan ID {project_id} tidak ditemukan atau sudah dihapus")
-        return False
-
-    print(f"Re-crawling project: {project['name']}")
-    print(f"Jumlah URL: {len(project['source_urls'])}")
-
-    # Initialize crawler
+async def recrawl_project(project_id: int) -> bool:
+    await init_database()
+    session_maker = get_session_maker()
     crawler = CrawlerService()
 
-    # Re-crawl semua URL
-    print("Mulai crawling...")
-    results = crawler.crawl_urls(project['source_urls'], delay=1)
+    async with session_maker() as session:
+        # Load project from MySQL
+        project = await ProjectRepository.get_by_id(session, project_id)
+        if not project:
+            print(f"Project dengan ID {project_id} tidak ditemukan")
+            return False
 
-    print(f"\nHasil crawling:")
-    print(f"  Success: {results['success_count']}")
-    print(f"  Failed: {results['failed_count']}")
+        print(f"Re-crawling project: {project.name} (id={project.id})")
 
-    if results['success_count'] == 0:
-        print("Gagal: Tidak ada URL yang berhasil di-crawl")
-        return False
+        # Source URLs are stored in the on-disk source_urls.txt
+        from config import Config
+        urls_file = os.path.join(
+            Config.RESULTS_DIR,
+            project.name.replace(' ', '_').lower(),
+            'source_urls.txt'
+        )
 
-    # Update documents dengan content baru
-    new_documents = []
-    for doc in results['success']:
-        new_documents.append({
-            'id': doc['id'],
-            'title': doc['title'],
-            'url': doc['url'],
-            'content_preview': doc['content']  # Full content
-        })
+        if not os.path.exists(urls_file):
+            print(f"source_urls.txt tidak ditemukan: {urls_file}")
+            print("Project ini mungkin belum pernah di-crawl dari file TXT.")
+            return False
 
-    # Update project
-    projects[project_index]['documents'] = new_documents
-    projects[project_index]['document_count'] = len(new_documents)
+        with open(urls_file, 'r', encoding='utf-8') as f:
+            urls = [line.strip() for line in f if line.strip()]
 
-    # Save projects
-    with open(projects_file, 'w', encoding='utf-8') as f:
-        json.dump(projects, f, indent=2, ensure_ascii=False)
+        if not urls:
+            print("Tidak ada URL dalam source_urls.txt")
+            return False
 
-    print(f"\n[OK] Project berhasil di-update!")
-    print(f"   Dokumen lama: {project['document_count']}")
-    print(f"   Dokumen baru: {len(new_documents)}")
+        print(f"Jumlah URL: {len(urls)}")
 
-    # Update juga file di results folder
-    project_folder = f"data/results/{project['name'].replace(' ', '_').lower()}"
-    if os.path.exists(project_folder):
-        docs_file = os.path.join(project_folder, 'documents.json')
-        with open(docs_file, 'w', encoding='utf-8') as f:
-            json.dump(new_documents, f, indent=2, ensure_ascii=False)
-        print(f"[OK] File {docs_file} juga di-update")
+        # Re-crawl
+        print("Mulai crawling...")
+        results = crawler.crawl_urls(urls, delay=1)
 
+        print(f"\nHasil crawling:")
+        print(f"  Success: {results['success_count']}")
+        print(f"  Failed:  {results['failed_count']}")
+
+        if results['success_count'] == 0:
+            print("Gagal: tidak ada URL yang berhasil di-crawl")
+            return False
+
+        # Replace documents in MySQL
+        old_count = await DocumentRepository.count(session, project_id=project.id)
+        await DocumentRepository.delete_by_project(session, project.id)
+
+        new_docs = [
+            {
+                'title': doc['title'],
+                'content': doc['content'],
+                'url': doc['url'],
+                'tokens_count': 0,
+            }
+            for doc in results['success']
+        ]
+        await DocumentRepository.create_bulk(session, documents=new_docs, project_id=project.id)
+
+        # Keep document_count in sync
+        new_count = len(new_docs)
+        await ProjectRepository.update(session, project.id, document_count=new_count)
+        await session.commit()
+
+        # Also update the on-disk documents.json (used by lda_service corpus rebuild)
+        project_folder = os.path.join(
+            Config.RESULTS_DIR,
+            project.name.replace(' ', '_').lower()
+        )
+        if os.path.exists(project_folder):
+            import json
+            docs_file = os.path.join(project_folder, 'documents.json')
+            with open(docs_file, 'w', encoding='utf-8') as f:
+                json.dump(
+                    [{'title': d['title'], 'content': d['content'], 'url': d['url']} for d in new_docs],
+                    f, indent=2, ensure_ascii=False
+                )
+            print(f"[OK] {docs_file} diperbarui")
+
+        print(f"\n[OK] Project berhasil di-update!")
+        print(f"   Dokumen lama: {old_count}")
+        print(f"   Dokumen baru: {new_count}")
+
+    await close_database()
     return True
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Usage: python recrawl_project.py <project_id>")
-        print("Example: python recrawl_project.py 2")
+        print("Usage: python scripts/recrawl_project.py <project_id>")
+        print("Example: python scripts/recrawl_project.py 4")
         sys.exit(1)
 
-    project_id = int(sys.argv[1])
-    recrawl_project(project_id)
+    asyncio.run(recrawl_project(int(sys.argv[1])))

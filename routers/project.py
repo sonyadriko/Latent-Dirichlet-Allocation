@@ -1,17 +1,18 @@
 """
 Project router for FastAPI
-Handles project management for LDA models
+Handles project management for LDA models (MySQL-backed).
 """
-from typing import Optional
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.project import Project
+
 from services.lda_service import LDAService
 from services.lda_singleton import get_lda_service
 from core.security import get_current_user
 from core.database import get_session
-from models.user import User
 from core.exceptions import NotFoundException
+from models.db_models import User
+from repositories.project_repository import ProjectRepository
+from repositories.document_repository import DocumentRepository
 
 router = APIRouter()
 
@@ -19,11 +20,31 @@ router = APIRouter()
 lda_service = get_lda_service()
 
 
+async def _load_project_into_service(session: AsyncSession, project) -> tuple[bool, str]:
+    """
+    Load a DB project's Gensim model into the LDA service, passing the project's
+    documents so the corpus can be rebuilt when needed.
+    """
+    documents = await DocumentRepository.list_documents(
+        session, project_id=project.id, limit=10000
+    )
+    docs_data = [
+        {"id": d.id, "title": d.title, "content": d.content, "url": d.url}
+        for d in documents
+    ]
+    return lda_service.load_project_model(
+        project_name=project.name,
+        project_id=project.id,
+        document_count=project.document_count,
+        documents=docs_data,
+    )
+
+
 @router.get("/")
-async def get_projects():
+async def get_projects(session: AsyncSession = Depends(get_session)):
     """Get All Projects"""
     try:
-        projects = Project.get_all_projects()
+        projects = await ProjectRepository.list_projects(session, status="active")
         return {
             'success': True,
             'data': [project.to_dict() for project in projects],
@@ -39,7 +60,8 @@ async def get_projects():
 @router.post("/")
 async def create_project(
     request: Request,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Create a new project.
@@ -60,8 +82,14 @@ async def create_project(
         data = await request.json()
         project_req = ProjectCreateRequest(**data)
 
-        # Create project using Project model
-        project, error = Project.create(
+        if await ProjectRepository.name_exists(session, project_req.name):
+            return {
+                'success': False,
+                'message': 'Project name already exists'
+            }
+
+        project = await ProjectRepository.create(
+            session=session,
             name=project_req.name,
             description=project_req.description,
             num_topics=project_req.num_topics,
@@ -69,12 +97,6 @@ async def create_project(
             coherence_score=0.0,
             created_by=current_user.id
         )
-
-        if error:
-            return {
-                'success': False,
-                'message': error
-            }
 
         return {
             'success': True,
@@ -95,8 +117,6 @@ async def list_projects(
     session: AsyncSession = Depends(get_session)
 ):
     """List all projects for the admin UI"""
-    from repositories.project_repository import ProjectRepository
-
     try:
         projects = await ProjectRepository.list_projects(session)
         return {
@@ -111,11 +131,30 @@ async def list_projects(
         }
 
 
+@router.get("/stats/overview")
+async def get_project_stats(session: AsyncSession = Depends(get_session)):
+    """Get Project Statistics"""
+    try:
+        stats = await ProjectRepository.get_stats(session)
+        # Serialize recent project ORM objects
+        stats['recent_projects'] = [p.to_dict() for p in stats.get('recent_projects', [])]
+        return {
+            'success': True,
+            'data': stats,
+            'message': 'Project statistics retrieved successfully'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error getting project stats: {str(e)}'
+        }
+
+
 @router.get("/{project_id}")
-async def get_project(project_id: int):
+async def get_project(project_id: int, session: AsyncSession = Depends(get_session)):
     """Get Project by ID"""
     try:
-        project = Project.get_project_by_id(project_id)
+        project = await ProjectRepository.get_by_id(session, project_id)
 
         if not project:
             return {
@@ -136,10 +175,14 @@ async def get_project(project_id: int):
 
 
 @router.post("/{project_id}/load")
-async def load_project(project_id: int, current_user: User = Depends(get_current_user)):
+async def load_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
     """Load Project Model"""
     try:
-        project = Project.get_project_by_id(project_id)
+        project = await ProjectRepository.get_by_id(session, project_id)
 
         if not project:
             return {
@@ -147,8 +190,7 @@ async def load_project(project_id: int, current_user: User = Depends(get_current
                 'message': 'Project not found'
             }
 
-        # Load the project model
-        success, message = lda_service.switch_to_project(project_id)
+        success, message = await _load_project_into_service(session, project)
 
         if success:
             return {
@@ -173,81 +215,39 @@ async def load_project(project_id: int, current_user: User = Depends(get_current
         }
 
 
+async def _delete_project(project_id: int, session: AsyncSession):
+    """Shared delete logic: remove model files + DB row (cascades docs/runs)."""
+    project = await ProjectRepository.get_by_id(session, project_id)
+    if not project:
+        raise NotFoundException("Project", project_id)
+
+    if project.name:
+        LDAService.delete_project_files(project.name)
+
+    success = await ProjectRepository.delete(session, project_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to delete project from database'
+        )
+    return project.name
+
+
 @router.delete("/{project_id}/delete")
-async def delete_project(project_id: int):
-    """Delete Project (JSON-based for backward compatibility)"""
-    try:
-        project = Project.get_project_by_id(project_id)
-
-        if not project:
-            return {
-                'success': False,
-                'message': f'Project not found: {project_id}'
-            }
-
-        # Delete model files from filesystem
-        if project.name:
-            LDAService.delete_project_files(project.name)
-
-        # Delete from JSON file
-        success = Project.delete_project(project_id)
-
-        if success:
-            return {
-                'success': True,
-                'message': f'Project "{project.name}" deleted successfully'
-            }
-        else:
-            return {
-                'success': False,
-                'message': 'Failed to delete project'
-            }
-
-    except Exception as e:
-        return {
-            'success': False,
-            'message': f'Error deleting project: {str(e)}'
-        }
-
-
-@router.delete("/{project_id}/delete-db")
-async def delete_project_db(
+async def delete_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Delete Project from Database"""
-    from repositories.project_repository import ProjectRepository
-
+    """Delete Project (and its documents/pipeline runs via cascade)."""
     try:
-        # Get project first
-        project = await ProjectRepository.get_by_id(session, project_id)
-        if not project:
-            raise NotFoundException("Project", project_id)
-
-        # Delete model files from filesystem
-        if project.name:
-            LDAService.delete_project_files(project.name)
-
-        # Delete from database (cascade deletes documents, pipeline_runs)
-        success = await ProjectRepository.delete(session, project_id)
-
-        if success:
-            return {
-                'success': True,
-                'message': f'Project "{project.name}" deleted successfully'
-            }
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail='Failed to delete project from database'
-            )
-
+        name = await _delete_project(project_id, session)
+        return {
+            'success': True,
+            'message': f'Project "{name}" deleted successfully'
+        }
     except NotFoundException as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -257,25 +257,46 @@ async def delete_project_db(
         )
 
 
+@router.delete("/{project_id}/delete-db")
+async def delete_project_db(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Delete Project from Database (alias of /delete)."""
+    return await delete_project(project_id, current_user, session)
+
+
 @router.post("/{project_id}/clone")
-async def clone_project(project_id: int, request: Request, current_user: User = Depends(get_current_user)):
-    """Clone Project"""
+async def clone_project(
+    project_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Clone Project (metadata only; train to complete)."""
     try:
         data = await request.json()
 
-        original_project = Project.get_project_by_id(project_id)
-        if not original_project:
+        original = await ProjectRepository.get_by_id(session, project_id)
+        if not original:
             return {
                 'success': False,
                 'message': 'Original project not found'
             }
 
-        new_name = data.get('name', f"{original_project.name} (Copy)")
-        new_description = data.get('description', f"Clone of {original_project.description}")
-        new_num_topics = data.get('num_topics', original_project.num_topics)
+        new_name = data.get('name', f"{original.name} (Copy)")
+        new_description = data.get('description', f"Clone of {original.description or ''}")
+        new_num_topics = data.get('num_topics', original.num_topics)
 
-        # Create new project (but don't train yet)
-        new_project, error = Project.create(
+        if await ProjectRepository.name_exists(session, new_name):
+            return {
+                'success': False,
+                'message': 'Project name already exists'
+            }
+
+        new_project = await ProjectRepository.create(
+            session=session,
             name=new_name,
             description=new_description,
             num_topics=new_num_topics,
@@ -284,17 +305,11 @@ async def clone_project(project_id: int, request: Request, current_user: User = 
             created_by=current_user.id
         )
 
-        if error:
-            return {
-                'success': False,
-                'message': error
-            }
-
         return {
             'success': True,
             'data': {
                 'new_project': new_project.to_dict(),
-                'original_project': original_project.to_dict()
+                'original_project': original.to_dict()
             },
             'message': f'Project cloned as "{new_name}". Train with documents to complete the clone.'
         }
@@ -306,93 +321,33 @@ async def clone_project(project_id: int, request: Request, current_user: User = 
         }
 
 
-@router.get("/stats/overview")
-async def get_project_stats():
-    """Get Project Statistics"""
-    try:
-        projects = Project.get_all_projects()
-
-        total_projects = len(projects)
-        total_documents = sum(p.document_count for p in projects)
-        avg_coherence = sum(p.coherence_score for p in projects) / total_projects if total_projects > 0 else 0
-        total_topics = sum(p.num_topics for p in projects)
-
-        # Topic distribution
-        topic_dist = {}
-        for project in projects:
-            topic_dist[project.num_topics] = topic_dist.get(project.num_topics, 0) + 1
-
-        return {
-            'success': True,
-            'data': {
-                'total_projects': total_projects,
-                'total_documents': total_documents,
-                'average_coherence': round(avg_coherence, 3),
-                'total_topics': total_topics,
-                'topic_distribution': topic_dist,
-                'recent_projects': [p.to_dict() for p in sorted(projects, key=lambda x: x.created_at, reverse=True)[:5]]
-            },
-            'message': 'Project statistics retrieved successfully'
-        }
-
-    except Exception as e:
-        return {
-            'success': False,
-            'message': f'Error getting project stats: {str(e)}'
-        }
-
-
 @router.get("/{project_id}/documents")
 async def get_project_documents(
     project_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Get documents for a specific project"""
-    from repositories.project_repository import ProjectRepository
-    from repositories.document_repository import DocumentRepository
-
+    """Get documents for a specific project."""
     try:
-        # Try to get project from JSON file first (legacy)
-        project = Project.get_project_by_id(project_id)
-
-        if project:
-            # Get documents from project JSON (stored in project.documents)
-            documents_data = project.documents or []
-
-            return {
-                'success': True,
-                'data': {
-                    'project': project.to_dict(),
-                    'documents': documents_data,
-                    'total': len(documents_data)
-                },
-                'message': f'Found {len(documents_data)} documents for project: {project.name}'
-            }
-
-        # If not found in JSON, try database
-        db_project = await ProjectRepository.get_by_id(session, project_id)
-        if not db_project:
+        project = await ProjectRepository.get_by_id(session, project_id)
+        if not project:
             return {
                 'success': False,
                 'message': f'Project with ID {project_id} not found'
             }
 
-        # Get documents from database
         documents = await DocumentRepository.list_documents(
-            session,
-            project_id=project_id,
-            limit=1000
+            session, project_id=project_id, limit=10000
         )
 
         return {
             'success': True,
             'data': {
-                'project': db_project.to_dict(),
+                'project': project.to_dict(),
                 'documents': [doc.to_dict() for doc in documents],
                 'total': len(documents)
             },
-            'message': f'Found {len(documents)} documents for project: {db_project.name}'
+            'message': f'Found {len(documents)} documents for project: {project.name}'
         }
     except Exception as e:
         return {
@@ -402,58 +357,27 @@ async def get_project_documents(
 
 
 @router.get("/{project_id}/pyldavis")
-async def get_project_pyldavis(project_id: int):
-    """
-    Get pyLDAvis visualization data for a specific project.
-
-    Args:
-        project_id: ID of the project
-
-    Returns JSON data compatible with pyLDAvis JavaScript visualization.
-    """
+async def get_project_pyldavis(
+    project_id: int,
+    session: AsyncSession = Depends(get_session)
+):
+    """Get pyLDAvis visualization data for a specific project."""
     try:
-        # Get project
-        project = Project.get_project_by_id(project_id)
-
+        project = await ProjectRepository.get_by_id(session, project_id)
         if not project:
             return {
                 'success': False,
                 'message': f'Project with ID {project_id} not found'
             }
 
-        # Load project model
-        success, message = lda_service.load_project_model(project_id=project_id)
-
+        success, message = await _load_project_into_service(session, project)
         if not success:
             return {
                 'success': False,
                 'message': f'Failed to load project model: {message}'
             }
 
-        # Try to load preprocessed data for the project if available
-        import os
-        import json
-        from config import Config
-
-        project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
-        data_file = os.path.join(project_folder, f'{project.name}_data.json')
-
-        corpus = None
-        if os.path.exists(data_file):
-            try:
-                with open(data_file, 'r', encoding='utf-8') as f:
-                    project_data = json.load(f)
-                    # Reconstruct corpus from preprocessed data
-                    if 'preprocessed_data' in project_data:
-                        from services.preprocessing import TextPreprocessor
-                        preprocessor = TextPreprocessor()
-                        preprocessed_docs = [item['tokens'] for item in project_data['preprocessed_data']]
-                        corpus = [lda_service.dictionary.doc2bow(doc) for doc in preprocessed_docs]
-            except Exception as e:
-                print(f"Warning: Could not load corpus from project data: {e}")
-
-        # Prepare pyLDAvis data
-        pyldavis_data = lda_service.get_pyldavis_data(corpus=corpus)
+        pyldavis_data = lda_service.get_pyldavis_data()
 
         if pyldavis_data is None:
             return {

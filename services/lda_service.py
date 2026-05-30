@@ -265,9 +265,15 @@ class LDAService:
     
     def save_project_model(self, project_name, coherence_score, doc_count, num_topics,
                           source_urls=None, documents_data=None):
-        """Save trained model for a specific project"""
-        from models.project import Project
+        """
+        Save the trained Gensim model and its artifacts to disk for a project.
 
+        Pure filesystem operation: persisting project metadata to the database
+        is the responsibility of the (async) caller via ProjectRepository.
+
+        Returns:
+            The model path (str) on disk.
+        """
         # Create project folder
         project_folder = os.path.join(Config.RESULTS_DIR, project_name.replace(' ', '_').lower())
         os.makedirs(project_folder, exist_ok=True)
@@ -301,175 +307,104 @@ class LDAService:
             for url in source_urls or []:
                 f.write(url + '\n')
 
-        # Create project record
-        try:
-            project, error = Project.create(
-                name=project_name,
-                description=f"LDA model with {num_topics} topics on {doc_count} documents",
-                num_topics=num_topics,
-                document_count=doc_count,
-                coherence_score=coherence_score,
-                source_urls=source_urls or [],
-                documents=documents_data or []
-            )
-
-            if project:
-                return project.model_path
-        except Exception as e:
-            print(f"Error creating project record: {e}")
-
         return model_path
     
-    def load_project_model(self, project_id=None, project_name=None):
-        """Load trained model for a specific project"""
-        from models.project import Project
+    def load_project_model(self, project_name, project_id=None, document_count=0, documents=None):
+        """
+        Load a trained Gensim model from disk for a project.
+
+        Project metadata is supplied by the (async) caller from the database;
+        this method only touches the filesystem.
+
+        Args:
+            project_name: Project name (used to locate the model folder)
+            project_id: DB project id (tracked for downstream search)
+            document_count: Number of documents in the project
+            documents: List of document dicts ({title, content, url, ...}) used
+                       to rebuild the corpus when it isn't already loaded
+
+        Returns:
+            Tuple (success: bool, message: str)
+        """
         from services.preprocessing import TextPreprocessor
 
         try:
-            # Get project by ID or name
-            if project_id:
-                project = Project.get_project_by_id(project_id)
-            elif project_name:
-                project = Project.get_project_by_name(project_name)
-            else:
-                return False, "Project ID or name is required"
-
-            if not project:
-                return False, "Project not found"
+            if not project_name:
+                return False, "Project name is required"
 
             # Build model path
-            project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
+            project_folder = os.path.join(Config.RESULTS_DIR, project_name.replace(' ', '_').lower())
             model_path = os.path.join(project_folder, 'lda_model')
 
             # Load model
-            if os.path.exists(model_path + '_model') and os.path.exists(model_path + '_dict'):
-                self.load_model(model_path)
-
-                # Track current project for proper document count
-                self.current_project_id = project.id
-                self.current_project_doc_count = project.document_count
-
-                # Store project documents for search functionality
-                self.current_project_documents = project.documents or []
-
-                # If no documents in metadata, try loading from project folder
-                if not self.current_project_documents:
-                    project_documents_file = os.path.join(project_folder, 'documents.json')
-                    if os.path.exists(project_documents_file):
-                        with open(project_documents_file, 'r', encoding='utf-8') as f:
-                            self.current_project_documents = json.load(f)
-
-                # Rebuild corpus if not loaded (for backward compatibility)
-                if self.corpus is None:
-                    print(f"Rebuilding corpus for project: {project.name}")
-                    print(f"  project.documents exists: {bool(project.documents)}")
-                    print(f"  project.document_count: {project.document_count}")
-                    try:
-                        preprocessor = TextPreprocessor()
-                        doc_contents = []
-
-                        # Try to get documents from project metadata first
-                        if project.documents:
-                            print(f"  Using project.documents ({len(project.documents)} items)")
-                            # Handle both 'content' and 'content_preview' fields
-                            doc_contents = [doc.get('content') or doc.get('content_preview', '') for doc in project.documents]
-                            doc_contents = [c for c in doc_contents if c]  # Filter out empty
-                            print(f"  Extracted {len(doc_contents)} contents from project.documents")
-                        else:
-                            # Fallback 1: try to load from project folder's documents.json
-                            project_folder = os.path.join(Config.RESULTS_DIR, project.name.replace(' ', '_').lower())
-                            project_documents_file = os.path.join(project_folder, 'documents.json')
-                            print(f"  project.documents is empty, trying project folder documents.json")
-                            print(f"  project documents.json path: {project_documents_file}")
-                            print(f"  project documents.json exists: {os.path.exists(project_documents_file)}")
-                            if os.path.exists(project_documents_file):
-                                with open(project_documents_file, 'r', encoding='utf-8') as f:
-                                    project_docs = json.load(f)
-                                print(f"  Loaded {len(project_docs)} docs from project documents.json")
-                                # Use content_preview from project documents
-                                doc_contents = [doc.get('content') or doc.get('content_preview', '') for doc in project_docs]
-                                doc_contents = [c for c in doc_contents if c]  # Filter out empty
-                                print(f"  Using {len(doc_contents)} documents from project documents.json")
-                            else:
-                                # Fallback 2: try to load from global documents.json
-                                print(f"  project documents.json NOT FOUND, trying global documents.json")
-                                documents_file = os.path.join(Config.DATA_DIR, 'documents.json')
-                                print(f"  global documents.json path: {documents_file}")
-                                print(f"  global documents.json exists: {os.path.exists(documents_file)}")
-                                if os.path.exists(documents_file):
-                                    with open(documents_file, 'r', encoding='utf-8') as f:
-                                        all_docs = json.load(f)
-                                    print(f"  Loaded {len(all_docs)} docs from global documents.json")
-                                    # Use the first N documents matching the project's document count
-                                    doc_contents = [doc.get('content', '') for doc in all_docs[:project.document_count] if doc.get('content')]
-                                    print(f"  Using {len(doc_contents)} documents from global documents.json")
-                                else:
-                                    print(f"  global documents.json NOT FOUND!")
-
-                        print(f"  Final doc_contents length: {len(doc_contents)}")
-
-                        if doc_contents:
-                            print(f"  Preprocessing {len(doc_contents)} documents...")
-                            # Preprocess
-                            preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
-                            print(f"  Preprocessed {len(preprocessed_docs)} docs")
-
-                            # Rebuild corpus using existing dictionary
-                            print(f"  Building corpus with dictionary (vocab size: {len(self.dictionary)})")
-                            self.corpus = [self.dictionary.doc2bow(doc) for doc in preprocessed_docs]
-                            print(f"  Corpus built: {len(self.corpus)} docs")
-
-                            # Save corpus for future use
-                            print(f"  Saving corpus to {model_path}_mm")
-                            corpora.MmCorpus.serialize(model_path + '_mm', self.corpus)
-                            print(f"Corpus rebuilt ({len(self.corpus)} docs) and saved for {project.name}")
-                        else:
-                            print(f"ERROR: No doc_contents available!")
-                    except Exception as e:
-                        print(f"Warning: Could not rebuild corpus: {e}")
-                        import traceback
-                        traceback.print_exc()
-
-                return True, f"Successfully loaded project: {project.name}"
-            else:
+            if not (os.path.exists(model_path + '_model') and os.path.exists(model_path + '_dict')):
                 return False, "Model files not found for this project"
+
+            self.load_model(model_path)
+
+            # Track current project
+            self.current_project_id = project_id
+            self.current_project_doc_count = document_count
+
+            # Store project documents for search functionality
+            self.current_project_documents = documents or []
+
+            # Fall back to the on-disk documents.json saved at training time
+            if not self.current_project_documents:
+                project_documents_file = os.path.join(project_folder, 'documents.json')
+                if os.path.exists(project_documents_file):
+                    with open(project_documents_file, 'r', encoding='utf-8') as f:
+                        self.current_project_documents = json.load(f)
+
+            # Rebuild corpus if not loaded
+            if self.corpus is None:
+                try:
+                    doc_contents = [
+                        doc.get('content') or doc.get('content_preview', '')
+                        for doc in self.current_project_documents
+                    ]
+                    doc_contents = [c for c in doc_contents if c]
+
+                    if doc_contents:
+                        preprocessor = TextPreprocessor()
+                        preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
+                        self.corpus = [self.dictionary.doc2bow(doc) for doc in preprocessed_docs]
+                        corpora.MmCorpus.serialize(model_path + '_mm', self.corpus)
+                        print(f"Corpus rebuilt ({len(self.corpus)} docs) for {project_name}")
+                    else:
+                        print(f"No document contents available to rebuild corpus for {project_name}")
+                except Exception as e:
+                    print(f"Warning: Could not rebuild corpus: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            return True, f"Successfully loaded project: {project_name}"
 
         except Exception as e:
             return False, f"Error loading project model: {str(e)}"
-    
-    def get_available_projects(self):
-        """Get list of all available projects"""
-        from models.project import Project
-        
-        try:
-            projects = Project.get_all_projects()
-            return [p.to_dict() for p in projects]
-        except Exception as e:
-            print(f"Error getting projects: {e}")
-            return []
-    
-    def switch_to_project(self, project_id):
-        """Switch to a specific project model"""
-        success, message = self.load_project_model(project_id=project_id)
-        return success, message
+
+    def switch_to_project(self, project_name, project_id=None, document_count=0, documents=None):
+        """Switch to a specific project model (file-based load)."""
+        return self.load_project_model(
+            project_name=project_name,
+            project_id=project_id,
+            document_count=document_count,
+            documents=documents
+        )
 
     def get_documents_for_search(self):
-        """Get documents for search -优先使用当前项目文档"""
-        if self.current_project_documents:
-            from models.document import Document
-            return [
-                Document(
-                    id=doc.get('id', i),
-                    title=doc.get('title', 'Untitled'),
-                    content=doc.get('content') or doc.get('content_preview', ''),
-                    category=doc.get('category'),
-                    author=doc.get('author')
-                )
-                for i, doc in enumerate(self.current_project_documents)
-            ]
-        # Fallback to global documents
+        """Get the current project's documents as lightweight search containers."""
         from models.document import Document
-        return Document.get_all_documents()
+        return [
+            Document(
+                id=doc.get('id', i),
+                title=doc.get('title', 'Untitled'),
+                content=doc.get('content') or doc.get('content_preview', ''),
+                category=doc.get('category'),
+                author=doc.get('author')
+            )
+            for i, doc in enumerate(self.current_project_documents or [])
+        ]
 
     def get_pyldavis_data(self, corpus=None, sort_topics=True):
         """

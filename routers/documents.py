@@ -9,8 +9,7 @@ from pydantic import BaseModel, Field
 
 from core.database import get_session
 from core.security import get_current_user
-from models.user import User
-from models.db_models import Document
+from models.db_models import User, Document
 from repositories.document_repository import DocumentRepository
 from repositories.project_repository import ProjectRepository
 
@@ -89,42 +88,14 @@ async def create_manual_document(
         Created document
     """
     try:
-        # Verify/create project if provided
+        # Verify project exists if provided
         if document_data.project_id:
             project = await ProjectRepository.get_by_id(session, document_data.project_id)
-
-            # If not in database, check JSON file and create in database
             if not project:
-                from models.project import Project as JSONProject
-                json_project = JSONProject.get_project_by_id(document_data.project_id)
-
-                if json_project:
-                    # Check if project with same name already exists in DB
-                    existing_project = await ProjectRepository.get_by_name(session, json_project.name)
-                    if existing_project:
-                        project = existing_project
-                        # Update document_data project_id to use the DB project ID
-                        document_data.project_id = project.id
-                        print(f"Using existing project in database: {project.name} (ID: {project.id})")
-                    else:
-                        # Create project in database from JSON data
-                        project = await ProjectRepository.create(
-                            session=session,
-                            name=json_project.name,
-                            description=json_project.description,
-                            num_topics=json_project.num_topics,
-                            document_count=0,
-                            coherence_score=json_project.coherence_score,
-                            created_by=json_project.created_by
-                        )
-                        await session.flush()
-                        document_data.project_id = project.id
-                        print(f"Created project in database from JSON: {json_project.name} (ID: {project.id})")
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Project with ID {document_data.project_id} not found"
-                    )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Project with ID {document_data.project_id} not found"
+                )
 
         # Create document
         document = await DocumentRepository.create(
@@ -135,32 +106,15 @@ async def create_manual_document(
             project_id=document_data.project_id
         )
 
-        await session.commit()
+        await session.flush()
         await session.refresh(document)
 
-        # Update project document_count in JSON file if project_id is provided
+        # Keep the project's document_count in sync
         if document_data.project_id:
-            try:
-                from models.project import Project as JSONProject
-                json_project = JSONProject.get_project_by_id(document_data.project_id)
-                if json_project:
-                    # Count actual documents in database for this project
-                    doc_count = await DocumentRepository.count(
-                        session=session,
-                        project_id=document_data.project_id
-                    )
-                    # Update JSON project document_count
-                    JSONProject.update_project_documents(
-                        project_id=document_data.project_id,
-                        source_urls=json_project.source_urls or [],
-                        documents=json_project.documents or [],
-                        num_topics=json_project.num_topics,
-                        document_count=doc_count,
-                        coherence_score=json_project.coherence_score
-                    )
-            except Exception as e:
-                # Log error but don't fail the request
-                print(f"Warning: Failed to update project document_count: {e}")
+            doc_count = await DocumentRepository.count(session=session, project_id=document_data.project_id)
+            await ProjectRepository.update(session, document_data.project_id, document_count=doc_count)
+
+        await session.commit()
 
         return DocumentResponse(
             id=document.id,
@@ -202,41 +156,14 @@ async def create_manual_documents_bulk(
         Created documents count and list
     """
     try:
-        # Verify/create project if provided
+        # Verify project exists if provided
         if bulk_data.project_id:
             project = await ProjectRepository.get_by_id(session, bulk_data.project_id)
-
-            # If not in database, check JSON file and create in database
             if not project:
-                from models.project import Project as JSONProject
-                json_project = JSONProject.get_project_by_id(bulk_data.project_id)
-
-                if json_project:
-                    # Check if project with same name already exists in DB
-                    existing_project = await ProjectRepository.get_by_name(session, json_project.name)
-                    if existing_project:
-                        project = existing_project
-                        bulk_data.project_id = project.id
-                        print(f"Using existing project in database: {project.name} (ID: {project.id})")
-                    else:
-                        # Create project in database from JSON data
-                        project = await ProjectRepository.create(
-                            session=session,
-                            name=json_project.name,
-                            description=json_project.description,
-                            num_topics=json_project.num_topics,
-                            document_count=0,  # Will be updated after documents are created
-                            coherence_score=json_project.coherence_score,
-                            created_by=json_project.created_by
-                        )
-                        await session.flush()
-                        bulk_data.project_id = project.id
-                        print(f"Created project in database from JSON: {json_project.name} (ID: {project.id})")
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Project with ID {bulk_data.project_id} not found"
-                    )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Project with ID {bulk_data.project_id} not found"
+                )
 
         # Validate document data
         for i, doc in enumerate(bulk_data.documents):
@@ -249,6 +176,31 @@ async def create_manual_documents_bulk(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Document at index {i} is missing 'content' field"
+                )
+
+        # Skip docs whose titles already exist in this project to prevent duplicates on re-migration
+        if bulk_data.project_id:
+            existing = await DocumentRepository.list_documents(
+                session=session, project_id=bulk_data.project_id, limit=10000
+            )
+            existing_titles = {doc.title for doc in existing}
+            bulk_data.documents = [
+                doc for doc in bulk_data.documents if doc.get("title") not in existing_titles
+            ]
+            if not bulk_data.documents:
+                existing_docs = [
+                    DocumentResponse(
+                        id=doc.id, title=doc.title, content=doc.content, url=doc.url,
+                        tokens_count=doc.tokens_count or 0, dominant_topic=doc.dominant_topic,
+                        dominant_prob=doc.dominant_prob, project_id=doc.project_id,
+                        created_at=doc.created_at.isoformat()
+                    )
+                    for doc in existing
+                ]
+                return BulkCreateResponse(
+                    created_count=0,
+                    documents=existing_docs,
+                    message=f"All documents already exist in database ({len(existing_docs)} found)"
                 )
 
         # Create documents in bulk
@@ -279,29 +231,11 @@ async def create_manual_documents_bulk(
             for doc in documents
         ]
 
-        # Update project document_count in JSON file if project_id is provided
+        # Keep the project's document_count in sync
         if bulk_data.project_id:
-            try:
-                from models.project import Project as JSONProject
-                json_project = JSONProject.get_project_by_id(bulk_data.project_id)
-                if json_project:
-                    # Count actual documents in database for this project
-                    doc_count = await DocumentRepository.count(
-                        session=session,
-                        project_id=bulk_data.project_id
-                    )
-                    # Update JSON project document_count
-                    JSONProject.update_project_documents(
-                        project_id=bulk_data.project_id,
-                        source_urls=json_project.source_urls or [],
-                        documents=json_project.documents or [],
-                        num_topics=json_project.num_topics,
-                        document_count=doc_count,
-                        coherence_score=json_project.coherence_score
-                    )
-            except Exception as e:
-                # Log error but don't fail the request
-                print(f"Warning: Failed to update project document_count: {e}")
+            doc_count = await DocumentRepository.count(session=session, project_id=bulk_data.project_id)
+            await ProjectRepository.update(session, bulk_data.project_id, document_count=doc_count)
+            await session.commit()
 
         return BulkCreateResponse(
             created_count=len(documents),
@@ -363,7 +297,6 @@ async def get_manual_documents(
             for doc in documents
         ]
 
-        # Return in consistent format with other endpoints
         return {
             'success': True,
             'documents': response_docs,
