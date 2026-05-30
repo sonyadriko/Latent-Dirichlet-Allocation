@@ -34,7 +34,6 @@ def get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             Config.DATABASE_URL,
             echo=False,  # Set to True for SQL query logging
-            pool_pre_ping=True,   # validate connections before use (external server)
             pool_recycle=3600,    # recycle connections hourly to avoid MySQL timeouts
         )
         logger.info("Database engine created for MySQL backend")
