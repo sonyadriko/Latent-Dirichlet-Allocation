@@ -30,7 +30,12 @@ All write endpoints require authentication.
 |-------|------|:--------:|-------|
 | `project_name` | string | Yes | 1–100 chars |
 | `file` | `.txt` file | Yes | UTF-8, one URL per line |
-| `num_topics` | int | No | Default: 5 |
+| `num_topics` | int | No | Default: project config → `Config.NUM_TOPICS` |
+| `num_words_per_topic` | int | No | Default: project config → `Config.NUM_WORDS_PER_TOPIC` |
+| `passes` | int | No | Default: project config → `Config.PASSES` |
+| `iterations` | int | No | Default: project config → `Config.ITERATIONS` |
+
+If a project with `project_name` already exists, its stored LDA config takes precedence over the global defaults (but explicit form values always win).
 
 **Success response:**
 ```json
@@ -113,20 +118,27 @@ Builds a Gensim **Dictionary** and **Bag-of-Words corpus**.
 **POST /api/kdd/datamining**
 
 ```json
-{ "num_topics": 5 }
+{
+  "num_topics": 5,
+  "num_words_per_topic": 10,
+  "passes": 15,
+  "iterations": 100
+}
 ```
 
-**LDA hyperparameters (from `config.py`):**
+All fields are optional. Global `config.py` values are used as fallback.
+
+**LDA hyperparameters:**
 
 | Parameter | Default | Meaning |
 |-----------|---------|---------|
-| `NUM_TOPICS` | 5 | Number of latent topics |
-| `NUM_WORDS_PER_TOPIC` | 10 | Top words shown per topic |
-| `PASSES` | 15 | Iterations over corpus |
-| `ITERATIONS` | 100 | Gibbs sampling steps per pass |
-| `chunksize` | 100 | Docs per training chunk |
-| `alpha` | `'auto'` | Document-topic concentration (learned) |
-| `random_state` | 42 | Reproducible training |
+| `num_topics` | `Config.NUM_TOPICS` (5) | Number of latent topics |
+| `num_words_per_topic` | `Config.NUM_WORDS_PER_TOPIC` (10) | Top words shown per topic |
+| `passes` | `Config.PASSES` (15) | Iterations over corpus |
+| `iterations` | `Config.ITERATIONS` (100) | Gibbs sampling steps per pass |
+| `chunksize` | 100 | Docs per training chunk (fixed) |
+| `alpha` | `'auto'` | Document-topic concentration (learned, fixed) |
+| `random_state` | 42 | Reproducible training (fixed) |
 
 Returns topics with word distributions and coherence score (C_V method; returns 0.0 on failure).
 

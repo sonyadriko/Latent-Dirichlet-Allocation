@@ -247,9 +247,34 @@ async def train_lda_model(
     data = await request.json()
     num_topics = data.get('num_topics', 5)
     project_name = data.get('project_name')
+    project_id = data.get('project_id')
     project_description = data.get('project_description', '')
-    source_urls = data.get('source_urls', [])  # New: source URLs from upload
-    crawled_documents = data.get('documents', [])  # New: crawled documents
+    source_urls = data.get('source_urls', [])
+    crawled_documents = data.get('documents', [])
+
+    # Resolve LDA config from DB project (name lookup, then id lookup, then service state)
+    from config import Config
+    passes = data.get('passes')
+    iterations = data.get('iterations')
+    num_words = data.get('num_words_per_topic')
+
+    db_project = None
+    if project_name:
+        db_project = await ProjectRepository.get_by_name(session, project_name)
+    if db_project is None and project_id:
+        db_project = await ProjectRepository.get_by_id(session, int(project_id))
+    if db_project is None and getattr(lda_service, 'current_project_id', None):
+        db_project = await ProjectRepository.get_by_id(session, lda_service.current_project_id)
+
+    if db_project:
+        passes = passes or db_project.passes
+        iterations = iterations or db_project.iterations
+        num_words = num_words or db_project.num_words_per_topic
+        num_topics = num_topics or db_project.num_topics
+
+    passes = passes or Config.PASSES
+    iterations = iterations or Config.ITERATIONS
+    num_words = num_words or Config.NUM_WORDS_PER_TOPIC
 
     # Determine which documents to use
     if crawled_documents:
@@ -295,6 +320,9 @@ async def train_lda_model(
         results = lda_service.train_on_documents(
             documents,
             num_topics=num_topics,
+            passes=passes,
+            iterations=iterations,
+            num_words=num_words,
             project_name=project_name if project_name else None,
             source_urls=source_urls if source_urls else None
         )
@@ -313,16 +341,27 @@ async def train_lda_model(
             if project:
                 await ProjectRepository.update(
                     session, project.id,
-                    num_topics=num_topics, document_count=doc_count,
-                    coherence_score=coherence, model_path=model_path, status='active'
+                    num_topics=num_topics,
+                    num_words_per_topic=num_words,
+                    passes=passes,
+                    iterations=iterations,
+                    document_count=doc_count,
+                    coherence_score=coherence,
+                    model_path=model_path,
+                    status='active'
                 )
                 await DocumentRepository.delete_by_project(session, project.id)
             else:
                 project = await ProjectRepository.create(
                     session=session, name=project_name,
                     description=project_description or f"LDA model with {num_topics} topics",
-                    num_topics=num_topics, document_count=doc_count,
-                    coherence_score=coherence, model_path=model_path,
+                    num_topics=num_topics,
+                    num_words_per_topic=num_words,
+                    passes=passes,
+                    iterations=iterations,
+                    document_count=doc_count,
+                    coherence_score=coherence,
+                    model_path=model_path,
                     created_by=current_user.id
                 )
 

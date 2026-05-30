@@ -35,15 +35,17 @@ class LDAService:
             'sample_bow': self.corpus[0] if self.corpus else []
         }
     
-    def train_lda(self, num_topics=None, passes=None, iterations=None):
+    def train_lda(self, num_topics=None, passes=None, iterations=None, num_words=None):
         """Train LDA model"""
         if self.corpus is None or self.dictionary is None:
             raise ValueError("Dictionary and corpus must be created first")
-        
+
         num_topics = num_topics or self.num_topics
         passes = passes or Config.PASSES
         iterations = iterations or Config.ITERATIONS
-        
+        if num_words is not None:
+            self.num_words = num_words
+
         self.lda_model = LdaModel(
             corpus=self.corpus,
             id2word=self.dictionary,
@@ -205,8 +207,8 @@ class LDAService:
         
         return topic_vector
     
-    def train_on_documents(self, documents, num_topics=None, project_name=None, save_model=True,
-                          source_urls=None):
+    def train_on_documents(self, documents, num_topics=None, passes=None, iterations=None,
+                          num_words=None, project_name=None, save_model=True, source_urls=None):
         """Train LDA model on a list of document objects"""
         from services.preprocessing import TextPreprocessor
 
@@ -227,7 +229,12 @@ class LDAService:
         # Train LDA model
         actual_num_topics = num_topics or self.num_topics
         print(f"Training LDA with {actual_num_topics} topics...")
-        topics = self.train_lda(num_topics=actual_num_topics)
+        topics = self.train_lda(
+            num_topics=actual_num_topics,
+            passes=passes,
+            iterations=iterations,
+            num_words=num_words,
+        )
 
         # Calculate coherence
         coherence = self.calculate_coherence(preprocessed_docs)

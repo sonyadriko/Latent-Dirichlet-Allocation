@@ -78,6 +78,9 @@ async def create_project(
             name: str = Field(..., min_length=2, max_length=100)
             description: str = Field(default="")
             num_topics: int = Field(default=5, ge=1, le=50)
+            num_words_per_topic: int = Field(default=10, ge=1, le=100)
+            passes: int = Field(default=15, ge=1, le=500)
+            iterations: int = Field(default=100, ge=1, le=5000)
 
         data = await request.json()
         project_req = ProjectCreateRequest(**data)
@@ -93,6 +96,9 @@ async def create_project(
             name=project_req.name,
             description=project_req.description,
             num_topics=project_req.num_topics,
+            num_words_per_topic=project_req.num_words_per_topic,
+            passes=project_req.passes,
+            iterations=project_req.iterations,
             document_count=0,
             coherence_score=0.0,
             created_by=current_user.id
@@ -213,6 +219,46 @@ async def load_project(
             'success': False,
             'message': f'Error loading project: {str(e)}'
         }
+
+
+@router.put("/{project_id}/lda-config")
+async def update_lda_config(
+    project_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """Update per-project LDA training parameters."""
+    try:
+        from pydantic import BaseModel, Field
+
+        class LdaConfigRequest(BaseModel):
+            num_topics: int = Field(..., ge=1, le=50)
+            num_words_per_topic: int = Field(..., ge=1, le=100)
+            passes: int = Field(..., ge=1, le=500)
+            iterations: int = Field(..., ge=1, le=5000)
+
+        data = await request.json()
+        cfg = LdaConfigRequest(**data)
+
+        project = await ProjectRepository.update(
+            session,
+            project_id,
+            num_topics=cfg.num_topics,
+            num_words_per_topic=cfg.num_words_per_topic,
+            passes=cfg.passes,
+            iterations=cfg.iterations,
+        )
+        if not project:
+            return {'success': False, 'message': 'Project not found'}
+
+        return {
+            'success': True,
+            'data': project.to_dict(),
+            'message': 'LDA config updated'
+        }
+    except Exception as e:
+        return {'success': False, 'message': f'Error: {str(e)}'}
 
 
 async def _delete_project(project_id: int, session: AsyncSession):

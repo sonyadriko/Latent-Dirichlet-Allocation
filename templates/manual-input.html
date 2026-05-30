@@ -925,7 +925,7 @@
                     body: JSON.stringify({
                         num_topics: numTopics,
                         documents: documentsForTraining,
-                        project_name: null  // Don't create new project, use existing
+                        project_id: currentProject ? currentProject.id : null
                     })
                 });
 

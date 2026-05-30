@@ -79,12 +79,13 @@ Returns results from external sources only (no local corpus lookup). No model re
 
 **POST /api/search/train**
 
-Used by the admin page's "Auto mode" — trains LDA on documents from the loaded project or a provided array.
+Used by all training paths (admin auto mode, admin manual mode, manual-input page).
 
 ```json
 {
   "num_topics": 5,
   "project_name": "my_project",
+  "project_id": 3,
   "project_description": "Optional description",
   "source_urls": ["https://..."],
   "documents": [
@@ -93,13 +94,27 @@ Used by the admin page's "Auto mode" — trains LDA on documents from the loaded
 }
 ```
 
-| Source | Priority | Used when |
-|--------|----------|-----------|
-| `documents` array in body | 1st | Crawl results passed directly |
-| `lda_service.current_project_documents` | 2nd | Project model loaded (re-train) |
-| Nothing | — | Returns error: not enough docs |
+### Document Source Priority
+
+| Priority | Source | Condition |
+|----------|--------|-----------|
+| 1st | `documents` array in body | Crawl results passed directly |
+| 2nd | `lda_service.current_project_documents` | Project model loaded (re-train) |
+| — | Nothing | Returns error: not enough docs |
 
 **Constraint:** `len(documents) >= num_topics`
+
+### LDA Config Resolution
+
+The endpoint resolves training parameters in this order (first match wins):
+
+1. Explicit values in request body (`passes`, `iterations`, `num_words_per_topic`)
+2. Stored config of the project identified by `project_name` (DB lookup by name)
+3. Stored config of the project identified by `project_id` (DB lookup by ID)
+4. Stored config of the currently loaded project (`lda_service.current_project_id`)
+5. Global fallback: `Config.PASSES`, `Config.ITERATIONS`, `Config.NUM_WORDS_PER_TOPIC`
+
+This means config set via **⚙️ LDA** on the `/projects` page is automatically applied — callers don't need to re-send the config on every training request.
 
 **Success:**
 ```json
@@ -117,7 +132,7 @@ Used by the admin page's "Auto mode" — trains LDA on documents from the loaded
 }
 ```
 
-If `project_name` is given, the project and its documents are persisted to MySQL (upsert by name).
+If `project_name` is given, the project and its documents are persisted to MySQL (upsert by name) and the resolved config is written back to the project row.
 
 ---
 

@@ -34,6 +34,42 @@
                     </div>
                 </div>
 
+                <!-- LDA Config Modal -->
+                <div id="lda-config-modal" class="modal">
+                    <div class="modal-content" style="max-width: 480px;">
+                        <div class="modal-header">
+                            <h2 id="lda-config-modal-title">⚙️ Konfigurasi LDA</h2>
+                            <button class="modal-close" onclick="closeLdaConfigModal()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="lda-config-project-id">
+                            <div class="config-form">
+                                <div class="config-field">
+                                    <label for="cfg-num-topics">Jumlah Topik <span class="config-hint">(1–50)</span></label>
+                                    <input type="number" id="cfg-num-topics" min="1" max="50" value="5">
+                                </div>
+                                <div class="config-field">
+                                    <label for="cfg-num-words">Kata per Topik <span class="config-hint">(1–100)</span></label>
+                                    <input type="number" id="cfg-num-words" min="1" max="100" value="10">
+                                </div>
+                                <div class="config-field">
+                                    <label for="cfg-passes">Passes <span class="config-hint">(1–500)</span></label>
+                                    <input type="number" id="cfg-passes" min="1" max="500" value="15">
+                                </div>
+                                <div class="config-field">
+                                    <label for="cfg-iterations">Iterations <span class="config-hint">(1–5000)</span></label>
+                                    <input type="number" id="cfg-iterations" min="1" max="5000" value="100">
+                                </div>
+                                <p class="config-note">Perubahan berlaku saat training berikutnya. Model yang sudah ada tidak otomatis dilatih ulang.</p>
+                                <div class="config-actions">
+                                    <button class="btn btn-secondary" onclick="closeLdaConfigModal()">Batal</button>
+                                    <button class="btn btn-primary" id="lda-config-save-btn" onclick="saveLdaConfig()">Simpan</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Documents Modal -->
                 <div id="documents-modal" class="modal">
                     <div class="modal-content">
@@ -136,6 +172,9 @@
                     <div class="project-actions">
                         <button class="btn-view-docs" onclick="viewDocuments(${project.id}, '${escapeHtml(project.name)}')">
                             📄 Dokumen
+                        </button>
+                        <button class="btn-settings" onclick="openLdaConfigModal(${project.id}, '${escapeHtml(project.name)}', ${project.num_topics||5}, ${project.num_words_per_topic||10}, ${project.passes||15}, ${project.iterations||100})">
+                            ⚙️ LDA
                         </button>
                         <button class="btn-delete" onclick="deleteProject(${project.id}, '${escapeHtml(project.name)}')">
                             🗑️ Hapus
@@ -241,6 +280,62 @@
                 closeDocumentsModal();
             }
         }
+
+        // LDA Config modal
+        function openLdaConfigModal(projectId, projectName, numTopics, numWords, passes, iterations) {
+            document.getElementById('lda-config-project-id').value = projectId;
+            document.getElementById('lda-config-modal-title').textContent = `⚙️ LDA Config: ${projectName}`;
+            document.getElementById('cfg-num-topics').value = numTopics;
+            document.getElementById('cfg-num-words').value = numWords;
+            document.getElementById('cfg-passes').value = passes;
+            document.getElementById('cfg-iterations').value = iterations;
+            document.getElementById('lda-config-modal').style.display = 'block';
+        }
+
+        function closeLdaConfigModal() {
+            document.getElementById('lda-config-modal').style.display = 'none';
+        }
+
+        async function saveLdaConfig() {
+            const projectId = document.getElementById('lda-config-project-id').value;
+            const btn = document.getElementById('lda-config-save-btn');
+
+            const payload = {
+                num_topics: parseInt(document.getElementById('cfg-num-topics').value),
+                num_words_per_topic: parseInt(document.getElementById('cfg-num-words').value),
+                passes: parseInt(document.getElementById('cfg-passes').value),
+                iterations: parseInt(document.getElementById('cfg-iterations').value),
+            };
+
+            btn.disabled = true;
+            btn.textContent = 'Menyimpan...';
+
+            try {
+                const response = await apiRequest(`/api/projects/${projectId}/lda-config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.success) {
+                    closeLdaConfigModal();
+                    loadProjects();
+                } else {
+                    alert(`Gagal menyimpan: ${escapeHtml(response.message)}`);
+                }
+            } catch (error) {
+                alert(`Error: ${escapeHtml(error.message)}`);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Simpan';
+            }
+        }
+
+        // Close LDA config modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('lda-config-modal');
+            if (event.target === modal) closeLdaConfigModal();
+        });
 
         // Delete project with confirmation
         async function deleteProject(projectId, projectName) {
@@ -355,7 +450,7 @@
 
         .project-header {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 140px;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 210px;
             gap: var(--space-4);
             padding: var(--space-4);
             background: var(--bg-card);
@@ -366,7 +461,7 @@
 
         .project-row {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 140px;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr 210px;
             gap: var(--space-4);
             padding: var(--space-4);
             border-bottom: 1px solid var(--border-color);
@@ -476,6 +571,73 @@
         .btn-view-docs:hover {
             background: #3b82f6;
             color: white;
+        }
+
+        .btn-settings {
+            background: rgba(139, 92, 246, 0.1);
+            color: #8b5cf6;
+            border: 1px solid #8b5cf6;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 500;
+            transition: all var(--transition-normal);
+            font-size: 0.875rem;
+        }
+
+        .btn-settings:hover {
+            background: #8b5cf6;
+            color: white;
+        }
+
+        .project-actions {
+            display: flex;
+            gap: var(--space-2);
+            flex-wrap: wrap;
+        }
+
+        .config-form {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+        }
+
+        .config-field {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-1);
+        }
+
+        .config-field label {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .config-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .config-field input {
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-input, var(--bg-card));
+            color: var(--text-primary);
+            font-size: 0.95rem;
+        }
+
+        .config-note {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .config-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--space-3);
         }
 
         /* Modal Styles */

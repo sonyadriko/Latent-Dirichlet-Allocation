@@ -72,6 +72,9 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     num_topics: Mapped[int] = mapped_column(Integer, default=5)
+    num_words_per_topic: Mapped[int] = mapped_column(Integer, default=10)
+    passes: Mapped[int] = mapped_column(Integer, default=15)
+    iterations: Mapped[int] = mapped_column(Integer, default=100)
     document_count: Mapped[int] = mapped_column(Integer, default=0)
     coherence_score: Mapped[float] = mapped_column(Float, default=0.0)
 
@@ -123,6 +126,9 @@ class Project(Base):
             "name": self.name,
             "description": self.description,
             "num_topics": self.num_topics,
+            "num_words_per_topic": self.num_words_per_topic,
+            "passes": self.passes,
+            "iterations": self.iterations,
             "document_count": self.document_count,
             "coherence_score": self.coherence_score,
             "model_path": self.model_path,

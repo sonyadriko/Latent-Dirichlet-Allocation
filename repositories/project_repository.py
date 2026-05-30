@@ -24,31 +24,21 @@ class ProjectRepository:
         name: str,
         description: Optional[str] = None,
         num_topics: int = 5,
+        num_words_per_topic: int = 10,
+        passes: int = 15,
+        iterations: int = 100,
         document_count: int = 0,
         coherence_score: float = 0.0,
         model_path: Optional[str] = None,
         created_by: Optional[int] = None
     ) -> Project:
-        """
-        Create a new project.
-
-        Args:
-            session: Database session
-            name: Project name (must be unique)
-            description: Project description
-            num_topics: Number of topics
-            document_count: Number of documents
-            coherence_score: Coherence score
-            model_path: Path to saved model
-            created_by: User ID who created the project
-
-        Returns:
-            Created Project instance
-        """
         project = Project(
             name=name,
             description=description,
             num_topics=num_topics,
+            num_words_per_topic=num_words_per_topic,
+            passes=passes,
+            iterations=iterations,
             document_count=document_count,
             coherence_score=coherence_score,
             model_path=model_path,
@@ -118,28 +108,14 @@ class ProjectRepository:
         name: Optional[str] = None,
         description: Optional[str] = None,
         num_topics: Optional[int] = None,
+        num_words_per_topic: Optional[int] = None,
+        passes: Optional[int] = None,
+        iterations: Optional[int] = None,
         document_count: Optional[int] = None,
         coherence_score: Optional[float] = None,
         model_path: Optional[str] = None,
         status: Optional[str] = None
     ) -> Optional[Project]:
-        """
-        Update project fields.
-
-        Args:
-            session: Database session
-            project_id: Project ID to update
-            name: New name
-            description: New description
-            num_topics: New number of topics
-            document_count: New document count
-            coherence_score: New coherence score
-            model_path: New model path
-            status: New status
-
-        Returns:
-            Updated Project or None
-        """
         project = await ProjectRepository.get_by_id(session, project_id)
         if project:
             if name is not None:
@@ -148,6 +124,12 @@ class ProjectRepository:
                 project.description = description
             if num_topics is not None:
                 project.num_topics = num_topics
+            if num_words_per_topic is not None:
+                project.num_words_per_topic = num_words_per_topic
+            if passes is not None:
+                project.passes = passes
+            if iterations is not None:
+                project.iterations = iterations
             if document_count is not None:
                 project.document_count = document_count
             if coherence_score is not None:

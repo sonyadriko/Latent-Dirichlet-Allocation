@@ -114,7 +114,8 @@ python scripts/migrate_json_to_mysql.py
 ### Manajemen Project
 
 - `/projects` — lihat semua project, dokumen per project, hapus project
-- `/admin` → section **Project Management** — load model ke memori untuk search & visualisasi
+- `/projects` → tombol **⚙️ LDA** per baris — atur `num_topics`, `passes`, `iterations`, `num_words_per_topic` per project
+- `/admin` → dropdown **Select Existing Project** + **Load Project** — load model ke memori untuk search & visualisasi
 
 ### Visualisasi
 
@@ -129,14 +130,29 @@ python scripts/migrate_json_to_mysql.py
 
 ## Konfigurasi LDA
 
-Edit di `config.py` atau set via environment variable:
+### Per-Project (direkomendasikan)
+
+Setiap project menyimpan konfigurasi LDA-nya sendiri di database. Ubah lewat `/projects` → tombol **⚙️ LDA**:
 
 | Parameter | Default | Keterangan |
 |-----------|---------|-----------|
-| `NUM_TOPICS` | 5 | Jumlah topik |
-| `NUM_WORDS_PER_TOPIC` | 10 | Kata per topik ditampilkan |
-| `PASSES` | 15 | Iterasi training |
-| `ITERATIONS` | 100 | Gibbs sampling per pass |
+| `num_topics` | 5 | Jumlah topik |
+| `num_words_per_topic` | 10 | Kata per topik ditampilkan |
+| `passes` | 15 | Iterasi training |
+| `iterations` | 100 | Gibbs sampling per pass |
+
+Config ini dipakai otomatis saat training berikutnya lewat endpoint `/api/search/train` maupun `/api/kdd/crawl`.
+
+### Global Fallback
+
+Nilai default jika project belum dikonfigurasi — edit di `config.py` atau set via environment variable:
+
+```env
+NUM_TOPICS=5
+NUM_WORDS_PER_TOPIC=10
+PASSES=15
+ITERATIONS=100
+```
 
 ---
 

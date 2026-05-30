@@ -80,6 +80,8 @@ Async SQLAlchemy 2.0 + aiomysql (external MySQL). Session dependency: `get_sessi
 
 DB models: `User`, `Project`, `Document`, `PipelineRun` (all in `models/db_models.py`).
 
+`Project` stores per-project LDA config: `num_topics`, `num_words_per_topic`, `passes`, `iterations`. These three new columns are added automatically via `ALTER TABLE` in `init_database()` if absent — no manual migration needed on existing databases.
+
 ### Authentication
 
 JWT (python-jose, HS256, 24h expiry). Protected endpoints use `Depends(get_current_user)`. Token sent as `Authorization: Bearer <token>` from the frontend (stored in localStorage). `get_current_user_optional` returns `None` instead of 401 when no token present.
@@ -89,7 +91,7 @@ JWT (python-jose, HS256, 24h expiry). Protected endpoints use `Depends(get_curre
 All values overridable via environment variables:
 - `SECRET_KEY`, `JWT_SECRET_KEY`
 - `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE` — composed into a `mysql+aiomysql://...?charset=utf8mb4` URL. An explicit `DATABASE_URL` overrides them.
-- LDA defaults: `NUM_TOPICS=5`, `NUM_WORDS_PER_TOPIC=10`, `PASSES=15`, `ITERATIONS=100`
+- LDA global defaults: `NUM_TOPICS=5`, `NUM_WORDS_PER_TOPIC=10`, `PASSES=15`, `ITERATIONS=100` — these are **fallbacks only**; per-project config stored in the `Project` table takes precedence at training time
 
 ### Adding new endpoints
 
@@ -97,6 +99,17 @@ All values overridable via environment variables:
 2. Repository method in `repositories/` for DB access
 3. Route in `routers/` using `Depends(get_session)` and `Depends(get_current_user)`
 4. Raise typed exceptions from `core/exceptions.py` (`NotFoundException`, `ValidationException`, etc.)
+
+### Training flow
+
+All three UI entry points funnel through `POST /api/search/train`:
+- **`/admin` auto mode** — search → train (sends `project_id` for existing projects)
+- **`/admin` manual mode** — upload TXT → `/api/kdd/upload-and-crawl` → train (sends `project_id`)
+- **`/manual-input`** — type documents → save to DB → train (sends `project_id` from `currentProject`)
+
+`POST /api/search/train` resolves LDA config in order: explicit request body → `project_name` DB lookup → `project_id` DB lookup → `lda_service.current_project_id` → global `Config.*`.
+
+`POST /api/kdd/crawl` (full one-shot pipeline) also reads per-project config from DB when the project already exists.
 
 ### Frontend
 

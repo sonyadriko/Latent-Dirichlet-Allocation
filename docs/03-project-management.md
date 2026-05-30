@@ -12,6 +12,7 @@ A **project** is the top-level unit that groups a trained LDA model with its sou
 | GET | `/api/projects/{id}` | No | Get project by ID |
 | GET | `/api/projects/stats/overview` | No | Aggregate statistics |
 | POST | `/api/projects/{id}/load` | Yes | Load model into memory |
+| PUT | `/api/projects/{id}/lda-config` | Yes | Update per-project LDA parameters |
 | POST | `/api/projects/{id}/clone` | Yes | Clone project metadata |
 | DELETE | `/api/projects/{id}/delete` | Yes | Delete project + documents + model files |
 | DELETE | `/api/projects/{id}/delete-db` | Yes | Alias for `/delete` |
@@ -28,25 +29,52 @@ A **project** is the top-level unit that groups a trained LDA model with its sou
 {
   "name": "Analisis Berita Ekonomi",
   "description": "Berita ekonomi Q2 2024",
-  "num_topics": 7
+  "num_topics": 7,
+  "num_words_per_topic": 10,
+  "passes": 20,
+  "iterations": 200
 }
 ```
 
-| Field | Constraint |
-|-------|-----------|
-| `name` | 2–100 chars, required, globally unique |
-| `description` | Optional |
-| `num_topics` | Integer 1–50, default 5 |
+| Field | Constraint | Default |
+|-------|-----------|---------|
+| `name` | 2–100 chars, required, globally unique | — |
+| `description` | Optional | `""` |
+| `num_topics` | Integer 1–50 | 5 |
+| `num_words_per_topic` | Integer 1–100 | 10 |
+| `passes` | Integer 1–500 | 15 |
+| `iterations` | Integer 1–5000 | 100 |
 
 **Success:**
 ```json
-{ "success": true, "data": { "id": 4, "name": "Analisis Berita Ekonomi", "num_topics": 7, ... } }
+{ "success": true, "data": { "id": 4, "name": "Analisis Berita Ekonomi", "num_topics": 7, "passes": 20, ... } }
 ```
 
-**Error:**
+---
+
+## Update LDA Config
+
+**PUT /api/projects/{id}/lda-config**
+
+Updates only the LDA training parameters for an existing project. Does **not** retrain — the new config takes effect on the next training run.
+
 ```json
-{ "success": false, "message": "Project name already exists" }
+{
+  "num_topics": 8,
+  "num_words_per_topic": 15,
+  "passes": 30,
+  "iterations": 300
+}
 ```
+
+All four fields are required. Constraints same as Create.
+
+**Success:**
+```json
+{ "success": true, "data": { "id": 4, "num_topics": 8, "passes": 30, ... }, "message": "LDA config updated" }
+```
+
+**Error:** `"Project not found"` — ID doesn't exist.
 
 ---
 
@@ -60,7 +88,7 @@ Returns only active projects (`status = "active"`) ordered by `created_at` desce
 {
   "success": true,
   "data": [
-    { "id": 4, "name": "...", "num_topics": 7, "document_count": 39, "coherence_score": 0.412, "status": "active", ... }
+    { "id": 4, "name": "...", "num_topics": 7, "passes": 20, "iterations": 200, "document_count": 39, "coherence_score": 0.412, "status": "active", ... }
   ]
 }
 ```
@@ -73,22 +101,11 @@ Returns only active projects (`status = "active"`) ordered by `created_at` desce
 
 Loads the project's Gensim LDA model from disk into memory so that search, similarity, and visualization features can use it.
 
-```json
-{
-  "success": true,
-  "data": { "project": { ... }, "model_loaded": true, "message": "Successfully loaded project: ..." }
-}
-```
-
 **What happens:**
 1. Project row fetched from MySQL.
 2. Documents fetched (up to 10,000) to rebuild corpus if not on disk.
 3. `lda_service.load_project_model(name, id, doc_count, documents)` called.
 4. Model files loaded from `data/results/{project_name}/`.
-
-**Errors:**
-- `"Project not found"` — ID doesn't exist
-- `"Model files not found for this project"` — project was created but never trained, or model folder was deleted
 
 **Note:** Only one project model lives in memory at a time (singleton LDA service). Loading a new project replaces the previous one.
 
@@ -101,10 +118,6 @@ Loads the project's Gensim LDA model from disk into memory so that search, simil
 Permanently removes:
 - MySQL rows: project + all documents + pipeline runs (cascade)
 - Disk: model folder at `data/results/{project_name}/`
-
-```json
-{ "success": true, "message": "Project \"Analisis Berita Ekonomi\" deleted successfully" }
-```
 
 Returns 404 if project not found.
 
@@ -122,9 +135,7 @@ Returns 404 if project not found.
 }
 ```
 
-Copies metadata only — documents are **not** copied, `document_count` starts at 0. The clone must be trained with new documents to produce a functional model.
-
-Default new name: `"{original} (Copy)"` if `name` is not provided.
+Copies metadata only — documents are **not** copied, `document_count` starts at 0. LDA config (`passes`, `iterations`, `num_words_per_topic`) is **not** cloned; new project uses global defaults. The clone must be trained with new documents to produce a functional model.
 
 ---
 
@@ -148,41 +159,27 @@ Default new name: `"{original} (Copy)"` if `name` is not provided.
 
 ---
 
-## Get Project Documents
-
-**GET /api/projects/{id}/documents**
-
-Returns up to 10,000 documents for the project. Response includes `content` truncated to 500 chars (use `to_dict_full()` via the document detail endpoint for full content).
-
-```json
-{
-  "success": true,
-  "data": {
-    "project": { ... },
-    "documents": [ { "id": 1, "title": "...", "content": "...", "url": "...", "tokens_count": 87 } ],
-    "total": 39
-  }
-}
-```
-
----
-
 ## Data Model
 
 ```
 Project
-├── id                INT PK
-├── name              VARCHAR(100) UNIQUE
-├── description       TEXT
-├── num_topics        INT (default 5)
-├── document_count    INT (denormalized counter, kept in sync)
-├── coherence_score   FLOAT
-├── model_path        VARCHAR(255)  ← path to disk model folder
-├── status            VARCHAR(20)   ← "active" | "archived" | "deleted"
-├── created_by        INT FK → users.id (SET NULL on delete)
-├── created_at        DATETIME
-└── updated_at        DATETIME
+├── id                  INT PK
+├── name                VARCHAR(100) UNIQUE
+├── description         TEXT
+├── num_topics          INT (default 5)
+├── num_words_per_topic INT (default 10)  ← top words shown per topic
+├── passes              INT (default 15)  ← LDA training passes
+├── iterations          INT (default 100) ← Gibbs sampling steps per pass
+├── document_count      INT (denormalized counter, kept in sync)
+├── coherence_score     FLOAT
+├── model_path          VARCHAR(255)  ← path to disk model folder
+├── status              VARCHAR(20)   ← "active" | "archived" | "deleted"
+├── created_by          INT FK → users.id (SET NULL on delete)
+├── created_at          DATETIME
+└── updated_at          DATETIME
 ```
+
+**Schema migration:** The three new LDA config columns (`num_words_per_topic`, `passes`, `iterations`) are added automatically via `ALTER TABLE` in `init_database()` if they don't exist, so existing databases are safe to upgrade without manual migration.
 
 ---
 
@@ -190,5 +187,5 @@ Project
 
 | URL | Template | Purpose |
 |-----|----------|---------|
-| `/projects` | `templates/projects.html` | List, view documents, delete |
-| `/admin` | `templates/admin.html` | Create, load, clone, KDD pipeline |
+| `/projects` | `templates/projects.html` | List, view documents, edit LDA config (⚙️ LDA button), delete |
+| `/admin` | `templates/admin.html` | Load project into memory, run KDD pipeline |

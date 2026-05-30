@@ -53,6 +53,9 @@ async def crawl(
     project_name: str = Form(...),
     file: UploadFile = File(...),
     num_topics: int = Form(default=Config.NUM_TOPICS),
+    num_words_per_topic: int = Form(default=Config.NUM_WORDS_PER_TOPIC),
+    passes: int = Form(default=Config.PASSES),
+    iterations: int = Form(default=Config.ITERATIONS),
     session: AsyncSession = Depends(get_session)
 ):
     """Full KDD Pipeline: Crawl, Preprocess, Transform, and LDA Analysis"""
@@ -142,7 +145,12 @@ async def crawl(
         # ===== STEP 4: DATA MINING (LDA) =====
         await kdd_state_manager.update_status('datamining', PipelineStatus.running)
 
-        topics = lda_service.train_lda(num_topics=num_topics)
+        topics = lda_service.train_lda(
+            num_topics=num_topics,
+            passes=passes,
+            iterations=iterations,
+            num_words=num_words_per_topic,
+        )
         doc_topics = lda_service.get_all_document_topics()
 
         try:
@@ -208,6 +216,9 @@ async def crawl(
                 session,
                 project.id,
                 num_topics=num_topics,
+                num_words_per_topic=num_words_per_topic,
+                passes=passes,
+                iterations=iterations,
                 document_count=doc_count,
                 coherence_score=coherence,
                 model_path=model_path,
@@ -221,6 +232,9 @@ async def crawl(
                 name=project_name,
                 description=f"LDA model with {num_topics} topics on {doc_count} documents",
                 num_topics=num_topics,
+                num_words_per_topic=num_words_per_topic,
+                passes=passes,
+                iterations=iterations,
                 document_count=doc_count,
                 coherence_score=coherence,
                 model_path=model_path,
@@ -457,6 +471,8 @@ async def datamining(request: Request, current_user: User = Depends(get_current_
     """Step 4: LDA Topic Modeling"""
     data = await request.json() or {}
     num_topics = data.get('num_topics', Config.NUM_TOPICS)
+    passes = data.get('passes', Config.PASSES)
+    iterations = data.get('iterations', Config.ITERATIONS)
 
     status = await kdd_state_manager.get_status('transforming')
     if status != PipelineStatus.completed:
@@ -475,7 +491,8 @@ async def datamining(request: Request, current_user: User = Depends(get_current_
             lda_service.create_dictionary_and_corpus(preprocessed_docs)
 
         # Train LDA model
-        topics = lda_service.train_lda(num_topics=num_topics)
+        num_words = data.get('num_words_per_topic', Config.NUM_WORDS_PER_TOPIC)
+        topics = lda_service.train_lda(num_topics=num_topics, passes=passes, iterations=iterations, num_words=num_words)
 
         # Get document-topic distribution
         doc_topics = lda_service.get_all_document_topics()

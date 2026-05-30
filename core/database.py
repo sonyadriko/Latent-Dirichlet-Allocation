@@ -113,10 +113,25 @@ async def init_database():
     """
     engine = get_engine()
     async with engine.begin() as conn:
-        # Import all models here to ensure they're registered with Base
         from models.db_models import User, Project, PipelineRun, Document
 
         await conn.run_sync(Base.metadata.create_all)
+
+        # Add new LDA config columns to existing projects table if missing
+        for col, definition in [
+            ("num_words_per_topic", "INT NOT NULL DEFAULT 10"),
+            ("passes", "INT NOT NULL DEFAULT 15"),
+            ("iterations", "INT NOT NULL DEFAULT 100"),
+        ]:
+            try:
+                await conn.execute(
+                    __import__("sqlalchemy", fromlist=["text"]).text(
+                        f"ALTER TABLE projects ADD COLUMN {col} {definition}"
+                    )
+                )
+                logger.info(f"Added column projects.{col}")
+            except Exception:
+                pass  # column already exists
 
     logger.info("Database tables created")
 
