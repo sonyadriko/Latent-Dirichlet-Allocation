@@ -895,6 +895,7 @@ https://www.cnnindonesia.com/berita-3
                 btnTrain.disabled = true;
                 btnTrain.innerHTML = '<div class="spinner"></div> Training...';
                 alertContainer.innerHTML = '';
+                startProgressPolling();
 
                 const requestData = {
                     num_topics: parseInt(numTopics),
@@ -912,6 +913,8 @@ https://www.cnnindonesia.com/berita-3
                     method: 'POST',
                     body: JSON.stringify(requestData)
                 });
+
+                stopProgressPolling(response.success);
 
                 if (response.success) {
                     let message = '✓ LDA Model trained successfully!<br>';
@@ -947,6 +950,7 @@ https://www.cnnindonesia.com/berita-3
 
             } catch (error) {
                 console.error('Training error:', error);
+                stopProgressPolling(false);
                 showAlert('Error: ' + error.message, 'error');
             } finally {
                 btnTrain.disabled = false;
@@ -1202,7 +1206,8 @@ https://www.cnnindonesia.com/berita-3
                 btnTrain.disabled = true;
                 btnTrain.innerHTML = '<div class="spinner"></div> Training...';
                 alertContainer.innerHTML = '';
-                
+                startProgressPolling();
+
                 // Prepare request data
                 const requestData = { num_topics: parseInt(numTopics) };
                 if (projectName) {
@@ -1217,7 +1222,9 @@ https://www.cnnindonesia.com/berita-3
                     method: 'POST',
                     body: JSON.stringify(requestData)
                 });
-                
+
+                stopProgressPolling(response.success);
+
                 if (response.success) {
                     let message = '✓ LDA Model trained successfully!<br>';
                     message += `Documents: ${response.data.num_documents}<br>`;
@@ -1253,6 +1260,7 @@ https://www.cnnindonesia.com/berita-3
                 }
                 
             } catch (error) {
+                stopProgressPolling(false);
                 alertContainer.innerHTML = `
                     <div class="alert alert-error">
                         ✕ ${error.message}
@@ -1377,6 +1385,86 @@ https://www.cnnindonesia.com/berita-3
             } catch (error) {
                 alert('Gagal mereset pipeline: ' + error.message);
             }
+        }
+
+        // ===== KDD Pipeline progress visualization =====
+        let progressPollInterval = null;
+        const PIPELINE_STEPS = ['crawling', 'preprocessing', 'transforming', 'datamining'];
+        const PIPELINE_STEP_LABELS = {
+            crawling: 'Crawling',
+            preprocessing: 'Preprocessing',
+            transforming: 'Transforming',
+            datamining: 'Data Mining (LDA)'
+        };
+
+        function addLogLine(text, type = 'info') {
+            const logOutput = document.getElementById('log-output');
+            if (!logOutput) return;
+            const line = document.createElement('div');
+            line.className = `log-line ${type}`;
+            line.textContent = text;
+            logOutput.appendChild(line);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        // Show progress UI and start polling /api/kdd/status during training
+        function startProgressPolling() {
+            const container = document.getElementById('progress-container');
+            if (container) container.classList.remove('hidden');
+
+            [...PIPELINE_STEPS, 'done'].forEach(step => {
+                const el = document.getElementById(`step-${step}`);
+                if (el) el.classList.remove('active', 'completed');
+            });
+
+            const logOutput = document.getElementById('log-output');
+            if (logOutput) logOutput.innerHTML = '';
+            addLogLine('Memulai proses training...', 'info');
+
+            const seen = {};
+            if (progressPollInterval) clearInterval(progressPollInterval);
+            progressPollInterval = setInterval(async () => {
+                try {
+                    const res = await apiRequest('/api/kdd/status');
+                    if (!res.success) return;
+
+                    PIPELINE_STEPS.forEach(step => {
+                        const el = document.getElementById(`step-${step}`);
+                        const s = res.status ? res.status[step] : null;
+                        if (!el || s === seen[step]) return;
+
+                        if (s === 'running') {
+                            el.classList.add('active');
+                            el.classList.remove('completed');
+                            addLogLine(`${PIPELINE_STEP_LABELS[step]}...`, 'processing');
+                        } else if (s === 'completed') {
+                            el.classList.remove('active');
+                            el.classList.add('completed');
+                            addLogLine(`${PIPELINE_STEP_LABELS[step]} selesai`, 'success');
+                        } else if (s === 'error') {
+                            el.classList.remove('active');
+                            addLogLine(`${PIPELINE_STEP_LABELS[step]} gagal`, 'error');
+                        }
+                        seen[step] = s;
+                    });
+                } catch (error) {
+                    console.error('Failed to poll pipeline status:', error);
+                }
+            }, 600);
+        }
+
+        // Stop polling and mark the pipeline as finished
+        function stopProgressPolling(success) {
+            if (progressPollInterval) {
+                clearInterval(progressPollInterval);
+                progressPollInterval = null;
+            }
+
+            const doneEl = document.getElementById('step-done');
+            if (doneEl && success) {
+                doneEl.classList.add('completed');
+            }
+            addLogLine(success ? 'Proses selesai!' : 'Proses gagal.', success ? 'success' : 'error');
         }
 
         // Show alert message

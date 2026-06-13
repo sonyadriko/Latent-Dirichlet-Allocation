@@ -28,6 +28,7 @@ uvicorn app:app --host 0.0.0.0 --port 3030 --reload
 ```bash
 python scripts/recrawl_project.py <project_id>     # Re-crawl a project (overwrites data)
 python scripts/migrate_json_to_mysql.py            # One-time: legacy JSON/SQLite -> MySQL
+python scripts/debug_manual_input.py               # Debug manual document input flow
 ```
 
 **Database setup:** the app uses an **external MySQL** server. Copy `.env.example` to `.env` and fill in `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE` (or a full `DATABASE_URL`). The target schema must exist and the user needs CREATE privileges (tables are auto-created at startup). `charset=utf8mb4` is required.
@@ -45,7 +46,7 @@ routers/        → HTTP handlers (thin: validate input, call services, return r
 services/       → Business logic (LDA, crawling, preprocessing, search, pyLDAvis)
 repositories/   → Async SQLAlchemy queries (project, document, user, pipeline)
 schemas/        → Pydantic request/response models
-models/         → db_models.py (SQLAlchemy ORM). user.py/project.py/document.py are LEGACY JSON models, no longer wired in
+models/         → db_models.py (SQLAlchemy ORM). user.py/project.py/document.py are LEGACY JSON models — not used for DB access, but Document from models/document.py is still imported by lda_service.py and search_service.py for in-memory representation during search/LDA inference
 core/           → database.py, security.py, state.py, exceptions.py, error_handlers.py
 ```
 
@@ -53,7 +54,7 @@ core/           → database.py, security.py, state.py, exceptions.py, error_han
 
 ### Single source of truth: MySQL
 
-All persistent data (users, projects, documents, pipeline runs) lives in **MySQL** via SQLAlchemy ORM (`models/db_models.py`) and the repositories. The old JSON files (`data/users.json`, `data/projects.json`) and SQLite (`data/lda_app.db`) are **deprecated backups** — the JSON model classes (`models/user.py`, `models/project.py`, `models/document.py`) are no longer imported by routers or services. Do all data access through the repositories.
+All persistent data (users, projects, documents, pipeline runs) lives in **MySQL** via SQLAlchemy ORM (`models/db_models.py`) and the repositories. The old JSON files (`data/users.json`, `data/projects.json`) and SQLite (`data/lda_app.db`) are **deprecated backups**. Do all data access through the repositories. The legacy `models/document.py` `Document` class is still used inside `lda_service.py` and `search_service.py` as an in-memory container during LDA inference — it is never persisted directly.
 
 ### Critical architectural quirks
 
@@ -98,7 +99,13 @@ All values overridable via environment variables:
 1. Schema in `schemas/` (or inline on the router if simple)
 2. Repository method in `repositories/` for DB access
 3. Route in `routers/` using `Depends(get_session)` and `Depends(get_current_user)`
-4. Raise typed exceptions from `core/exceptions.py` (`NotFoundException`, `ValidationException`, etc.)
+4. Raise typed exceptions from `core/exceptions.py`:
+   - `NotFoundException` (404) — missing resource
+   - `ValidationException` (400) — bad input
+   - `ConflictException` (409) — duplicate/conflict
+   - `UnauthorizedException` (401), `ForbiddenException` (403)
+   - `PipelineException` (422) — KDD stage failure (accepts `stage=` kwarg)
+   - `DatabaseException` (500), `ServiceUnavailableException` (503)
 
 ### Training flow
 
@@ -108,6 +115,8 @@ All three UI entry points funnel through `POST /api/search/train`:
 - **`/manual-input`** — type documents → save to DB → train (sends `project_id` from `currentProject`)
 
 `POST /api/search/train` resolves LDA config in order: explicit request body → `project_name` DB lookup → `project_id` DB lookup → `lda_service.current_project_id` → global `Config.*`.
+
+`POST /api/search/train` also reports stage progress (preprocessing → transforming → datamining) into `kdd_state_manager` as it runs, so `/admin`'s progress indicator can poll `GET /api/kdd/status` during training.
 
 `POST /api/kdd/crawl` (full one-shot pipeline) also reads per-project config from DB when the project already exists.
 

@@ -64,7 +64,7 @@ If a project with `project_name` already exists, its stored LDA config takes pre
 
 ## Stage-by-Stage Usage
 
-Use this flow when you want to review results at each stage before proceeding (visible in the admin UI step-by-step mode).
+These endpoints exist for reviewing results at each stage independently, but the current `/admin` UI does **not** call them — it always trains via `POST /api/search/train` (see "Training via /api/search/train" below), which runs the same 4 stages internally in one request.
 
 ### Stage 1 — Crawl
 
@@ -170,6 +170,21 @@ Status values: `pending` | `running` | `completed` | `error`
 
 ---
 
+## Training via `/api/search/train`
+
+`POST /api/search/train` (in `routers/search.py`, see [05-search-similarity.md](05-search-similarity.md)) is the entry point actually used by the `/admin` UI for both "Auto" and "Manual upload" modes. It runs the same 4 stages as the one-shot pipeline (preprocess → build dictionary/corpus → train LDA → coherence), but as direct calls into `services/lda_service.py` rather than via the `/api/kdd/*` endpoints above.
+
+While it runs, it reports progress into the same `kdd_state_manager` used by `GET /api/kdd/status`:
+
+1. Resets pipeline state, then immediately marks `crawling` and `selection` as `completed` (documents are already provided/loaded).
+2. `preprocessing` → `running` → `completed`
+3. `transforming` → `running` → `completed`
+4. `datamining` → `running` → `completed` (or `error` if training raises)
+
+This lets the `/admin` page poll `GET /api/kdd/status` during training to drive the 5-step progress indicator, even though training itself happens in a single request.
+
+---
+
 ## Error Responses
 
 | Message | Cause |
@@ -205,6 +220,6 @@ The `data/` directory must be persisted across deployments (Docker volume).
 The admin page at `/admin` provides two modes:
 
 - **Auto mode** (`🤖 Pencarian Otomatis`): search documents + train via `/api/search/train`
-- **Manual mode** (`📄 Upload File TXT`): upload a `.txt` file, crawl, then train
+- **Manual mode** (`📄 Upload File TXT`): upload a `.txt` file, crawl via `/api/kdd/upload-and-crawl`, then train via `/api/search/train`
 
-Progress is shown as a 5-step indicator: Crawling → Preprocessing → Transforming → Data Mining → Selesai.
+Progress is shown as a 5-step indicator: Crawling → Preprocessing → Transforming → Data Mining → Selesai. When training starts, `startProgressPolling()` (in `admin.html`'s inline script) unhides `#progress-container` and polls `GET /api/kdd/status` every 600ms, toggling `active`/`completed` classes on `#step-*` and appending lines to `#log-output`. `stopProgressPolling()` is called once `/api/search/train` resolves. For small document sets, training can finish faster than the poll interval, so the indicator may jump straight to "completed" without showing intermediate "active" states.

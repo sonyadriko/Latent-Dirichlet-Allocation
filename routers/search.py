@@ -10,6 +10,7 @@ from services.lda_singleton import get_lda_service
 from services.online_crawler import OnlineDocumentCrawler
 from core.security import get_current_user
 from core.database import get_session
+from core.state import kdd_state_manager, PipelineStatus
 from models.db_models import User
 from repositories.project_repository import ProjectRepository
 from repositories.document_repository import DocumentRepository
@@ -316,16 +317,61 @@ async def train_lda_model(
         }
 
     try:
-        # Train LDA model with project saving (writes Gensim model to disk)
-        results = lda_service.train_on_documents(
-            documents,
+        # Report KDD pipeline progress via kdd_state_manager (polled by the admin UI)
+        await kdd_state_manager.reset()
+        await kdd_state_manager.update_status('crawling', PipelineStatus.completed)
+        await kdd_state_manager.update_status('selection', PipelineStatus.completed)
+
+        from services.preprocessing import TextPreprocessor
+        preprocessor = TextPreprocessor()
+        lda_service.preprocessor = preprocessor
+
+        await kdd_state_manager.update_status('preprocessing', PipelineStatus.running)
+        doc_contents = [doc.content for doc in documents]
+        preprocessed_docs = preprocessor.preprocess_documents(doc_contents)
+        await kdd_state_manager.update_status('preprocessing', PipelineStatus.completed)
+
+        await kdd_state_manager.update_status('transforming', PipelineStatus.running)
+        lda_service.create_dictionary_and_corpus(preprocessed_docs)
+        await kdd_state_manager.update_status('transforming', PipelineStatus.completed)
+
+        await kdd_state_manager.update_status('datamining', PipelineStatus.running)
+        topics = lda_service.train_lda(
             num_topics=num_topics,
             passes=passes,
             iterations=iterations,
             num_words=num_words,
-            project_name=project_name if project_name else None,
-            source_urls=source_urls if source_urls else None
         )
+        coherence = lda_service.calculate_coherence(preprocessed_docs)
+
+        documents_data = [
+            {
+                'id': doc.id if hasattr(doc, 'id') else i,
+                'title': doc.title,
+                'url': getattr(doc, 'url', None),
+                'content_preview': doc.content[:1000] if len(doc.content) > 1000 else doc.content
+            }
+            for i, doc in enumerate(documents)
+        ]
+
+        results = {
+            'num_documents': len(documents),
+            'dictionary_size': len(lda_service.dictionary),
+            'num_topics': len(topics),
+            'coherence_score': coherence,
+            'topics': topics,
+            'documents_data': documents_data
+        }
+
+        if project_name:
+            model_path = lda_service.save_project_model(
+                project_name, coherence, len(documents), num_topics,
+                source_urls=source_urls or [],
+                documents_data=documents_data
+            )
+            results['model_path'] = model_path
+
+        await kdd_state_manager.update_status('datamining', PipelineStatus.completed)
 
         # Initialize search service after training
         get_search_service()
@@ -387,6 +433,7 @@ async def train_lda_model(
         }
 
     except Exception as e:
+        await kdd_state_manager.update_status('datamining', PipelineStatus.error)
         return {
             'success': False,
             'message': f'Error training LDA model: {str(e)}'
