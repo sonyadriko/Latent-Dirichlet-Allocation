@@ -81,7 +81,7 @@ Async SQLAlchemy 2.0 + aiomysql (external MySQL). Session dependency: `get_sessi
 
 DB models: `User`, `Project`, `Document`, `PipelineRun` (all in `models/db_models.py`).
 
-`Project` stores per-project LDA config: `num_topics`, `num_words_per_topic`, `passes`, `iterations`. These three new columns are added automatically via `ALTER TABLE` in `init_database()` if absent — no manual migration needed on existing databases.
+`Project` stores per-project LDA config: `num_topics`, `num_words_per_topic`, `passes`, `iterations`, `eta`. New columns are added automatically via `ALTER TABLE` in `init_database()` if absent — no manual migration needed on existing databases.
 
 ### Authentication
 
@@ -92,7 +92,7 @@ JWT (python-jose, HS256, 24h expiry). Protected endpoints use `Depends(get_curre
 All values overridable via environment variables:
 - `SECRET_KEY`, `JWT_SECRET_KEY`
 - `MYSQL_HOST/PORT/USER/PASSWORD/DATABASE` — composed into a `mysql+aiomysql://...?charset=utf8mb4` URL. An explicit `DATABASE_URL` overrides them.
-- LDA global defaults: `NUM_TOPICS=5`, `NUM_WORDS_PER_TOPIC=10`, `PASSES=15`, `ITERATIONS=100` — these are **fallbacks only**; per-project config stored in the `Project` table takes precedence at training time
+- LDA global defaults: `NUM_TOPICS=5`, `NUM_WORDS_PER_TOPIC=10`, `PASSES=15`, `ITERATIONS=100`, `ETA` (unset → `None` = Gensim symmetric prior) — these are **fallbacks only**; per-project config stored in the `Project` table takes precedence at training time
 
 ### Adding new endpoints
 

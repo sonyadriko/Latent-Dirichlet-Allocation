@@ -56,6 +56,7 @@ async def crawl(
     num_words_per_topic: int = Form(default=Config.NUM_WORDS_PER_TOPIC),
     passes: int = Form(default=Config.PASSES),
     iterations: int = Form(default=Config.ITERATIONS),
+    eta: float | None = Form(default=None),
     session: AsyncSession = Depends(get_session)
 ):
     """Full KDD Pipeline: Crawl, Preprocess, Transform, and LDA Analysis"""
@@ -150,6 +151,7 @@ async def crawl(
             passes=passes,
             iterations=iterations,
             num_words=num_words_per_topic,
+            eta=eta,
         )
         doc_topics = lda_service.get_all_document_topics()
 
@@ -219,6 +221,7 @@ async def crawl(
                 num_words_per_topic=num_words_per_topic,
                 passes=passes,
                 iterations=iterations,
+                eta=eta,
                 document_count=doc_count,
                 coherence_score=coherence,
                 model_path=model_path,
@@ -235,6 +238,7 @@ async def crawl(
                 num_words_per_topic=num_words_per_topic,
                 passes=passes,
                 iterations=iterations,
+                eta=eta,
                 document_count=doc_count,
                 coherence_score=coherence,
                 model_path=model_path,
@@ -492,7 +496,8 @@ async def datamining(request: Request, current_user: User = Depends(get_current_
 
         # Train LDA model
         num_words = data.get('num_words_per_topic', Config.NUM_WORDS_PER_TOPIC)
-        topics = lda_service.train_lda(num_topics=num_topics, passes=passes, iterations=iterations, num_words=num_words)
+        eta = data.get('eta')
+        topics = lda_service.train_lda(num_topics=num_topics, passes=passes, iterations=iterations, num_words=num_words, eta=eta)
 
         # Get document-topic distribution
         doc_topics = lda_service.get_all_document_topics()

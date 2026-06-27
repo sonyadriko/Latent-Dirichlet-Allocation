@@ -122,6 +122,7 @@ async def init_database():
             ("num_words_per_topic", "INT NOT NULL DEFAULT 10"),
             ("passes", "INT NOT NULL DEFAULT 15"),
             ("iterations", "INT NOT NULL DEFAULT 100"),
+            ("eta", "FLOAT NULL DEFAULT NULL"),
         ]:
             try:
                 await conn.execute(

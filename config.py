@@ -22,10 +22,12 @@ class Config:
     )
 
     # LDA Configuration
-    NUM_TOPICS = 5
-    NUM_WORDS_PER_TOPIC = 10
-    PASSES = 15
-    ITERATIONS = 100
+    NUM_TOPICS = int(os.environ.get('NUM_TOPICS', 5))
+    NUM_WORDS_PER_TOPIC = int(os.environ.get('NUM_WORDS_PER_TOPIC', 10))
+    PASSES = int(os.environ.get('PASSES', 15))
+    ITERATIONS = int(os.environ.get('ITERATIONS', 100))
+    # eta=None → Gensim symmetric prior (1/num_topics); set via ETA env var e.g. ETA=0.1
+    ETA = float(os.environ.get('ETA')) if os.environ.get('ETA') else None
 
     # Ensure directories exist
     @staticmethod

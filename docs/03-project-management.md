@@ -32,7 +32,8 @@ A **project** is the top-level unit that groups a trained LDA model with its sou
   "num_topics": 7,
   "num_words_per_topic": 10,
   "passes": 20,
-  "iterations": 200
+  "iterations": 200,
+  "eta": 0.1
 }
 ```
 
@@ -44,6 +45,7 @@ A **project** is the top-level unit that groups a trained LDA model with its sou
 | `num_words_per_topic` | Integer 1–100 | 10 |
 | `passes` | Integer 1–500 | 15 |
 | `iterations` | Integer 1–5000 | 100 |
+| `eta` | Float 0–1, optional | `null` (Gensim symmetric prior) |
 
 **Success:**
 ```json
@@ -63,11 +65,12 @@ Updates only the LDA training parameters for an existing project. Does **not** r
   "num_topics": 8,
   "num_words_per_topic": 15,
   "passes": 30,
-  "iterations": 300
+  "iterations": 300,
+  "eta": 0.05
 }
 ```
 
-All four fields are required. Constraints same as Create.
+`num_topics`, `num_words_per_topic`, `passes`, `iterations` are required. `eta` is optional (omit or `null` to use Gensim default). Constraints same as Create.
 
 **Success:**
 ```json
@@ -167,9 +170,10 @@ Project
 ├── name                VARCHAR(100) UNIQUE
 ├── description         TEXT
 ├── num_topics          INT (default 5)
-├── num_words_per_topic INT (default 10)  ← top words shown per topic
-├── passes              INT (default 15)  ← LDA training passes
-├── iterations          INT (default 100) ← Gibbs sampling steps per pass
+├── num_words_per_topic INT (default 10)   ← top words shown per topic
+├── passes              INT (default 15)   ← LDA training passes
+├── iterations          INT (default 100)  ← Gibbs sampling steps per pass
+├── eta                 FLOAT NULL         ← Dirichlet prior word-per-topic; NULL = symmetric
 ├── document_count      INT (denormalized counter, kept in sync)
 ├── coherence_score     FLOAT
 ├── model_path          VARCHAR(255)  ← path to disk model folder
@@ -179,7 +183,7 @@ Project
 └── updated_at          DATETIME
 ```
 
-**Schema migration:** The three new LDA config columns (`num_words_per_topic`, `passes`, `iterations`) are added automatically via `ALTER TABLE` in `init_database()` if they don't exist, so existing databases are safe to upgrade without manual migration.
+**Schema migration:** New LDA config columns are added automatically via `ALTER TABLE` in `init_database()` if they don't exist — including `eta FLOAT NULL DEFAULT NULL` — so existing databases upgrade safely without manual migration.
 
 ---
 

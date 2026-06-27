@@ -34,6 +34,7 @@ All write endpoints require authentication.
 | `num_words_per_topic` | int | No | Default: project config → `Config.NUM_WORDS_PER_TOPIC` |
 | `passes` | int | No | Default: project config → `Config.PASSES` |
 | `iterations` | int | No | Default: project config → `Config.ITERATIONS` |
+| `eta` | float | No | Default: project config → `Config.ETA` (None = Gensim symmetric prior) |
 
 If a project with `project_name` already exists, its stored LDA config takes precedence over the global defaults (but explicit form values always win).
 
@@ -122,7 +123,8 @@ Builds a Gensim **Dictionary** and **Bag-of-Words corpus**.
   "num_topics": 5,
   "num_words_per_topic": 10,
   "passes": 15,
-  "iterations": 100
+  "iterations": 100,
+  "eta": 0.1
 }
 ```
 
@@ -136,6 +138,7 @@ All fields are optional. Global `config.py` values are used as fallback.
 | `num_words_per_topic` | `Config.NUM_WORDS_PER_TOPIC` (10) | Top words shown per topic |
 | `passes` | `Config.PASSES` (15) | Iterations over corpus |
 | `iterations` | `Config.ITERATIONS` (100) | Gibbs sampling steps per pass |
+| `eta` | `Config.ETA` (None) | Dirichlet prior pada distribusi word-per-topic; `None` = symmetric (1/num_topics), nilai kecil (e.g. 0.01) → topik lebih sparse, nilai besar (e.g. 0.9) → kata lebih merata antar topik |
 | `chunksize` | 100 | Docs per training chunk (fixed) |
 | `alpha` | `'auto'` | Document-topic concentration (learned, fixed) |
 | `random_state` | 42 | Reproducible training (fixed) |

@@ -476,6 +476,10 @@
                         <label class="form-label" for="num-topics">Topics</label>
                         <input type="number" id="num-topics" class="form-input" value="5" min="2" max="20">
                     </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label" for="eta" title="Dirichlet prior pada distribusi word-per-topic. Kosongkan untuk default simetris Gensim.">η (Eta)</label>
+                        <input type="number" id="eta" class="form-input" placeholder="default" min="0.001" max="1" step="0.001">
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -522,6 +526,10 @@
                     <div class="form-group" style="flex: 2;">
                         <label class="form-label" for="num-topics-manual">Jumlah Topik</label>
                         <input type="number" id="num-topics-manual" class="form-input" value="5" min="2" max="20">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label" for="eta-manual" title="Dirichlet prior pada distribusi word-per-topic. Kosongkan untuk default simetris Gensim.">η (Eta)</label>
+                        <input type="number" id="eta-manual" class="form-input" placeholder="default" min="0.001" max="1" step="0.001">
                     </div>
                 </div>
 
@@ -897,11 +905,13 @@ https://www.cnnindonesia.com/berita-3
                 alertContainer.innerHTML = '';
                 startProgressPolling();
 
+                const etaManual = parseFloat(document.getElementById('eta-manual').value);
                 const requestData = {
                     num_topics: parseInt(numTopics),
                     source_urls: currentCrawlData.source_urls,
                     documents: currentCrawlData.documents
                 };
+                if (!isNaN(etaManual) && etaManual > 0) requestData.eta = etaManual;
                 if (projectName) {
                     requestData.project_name = projectName;
                     requestData.project_description = document.getElementById('new-project-description').value.trim();
@@ -1031,6 +1041,7 @@ https://www.cnnindonesia.com/berita-3
                     
                     // Update num-topics field with project's topic count
                     document.getElementById('num-topics').value = currentProject.num_topics;
+                    if (currentProject.eta) document.getElementById('eta').value = currentProject.eta;
                     
                     // Show success message
                     showAlert(`Successfully loaded project: ${currentProject.name}`, 'success');
@@ -1209,7 +1220,9 @@ https://www.cnnindonesia.com/berita-3
                 startProgressPolling();
 
                 // Prepare request data
+                const etaVal = parseFloat(document.getElementById('eta').value);
                 const requestData = { num_topics: parseInt(numTopics) };
+                if (!isNaN(etaVal) && etaVal > 0) requestData.eta = etaVal;
                 if (projectName) {
                     requestData.project_name = projectName;
                     requestData.project_description = document.getElementById('new-project-description').value.trim();

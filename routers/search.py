@@ -258,6 +258,7 @@ async def train_lda_model(
     passes = data.get('passes')
     iterations = data.get('iterations')
     num_words = data.get('num_words_per_topic')
+    eta = data.get('eta')
 
     db_project = None
     if project_name:
@@ -272,10 +273,14 @@ async def train_lda_model(
         iterations = iterations or db_project.iterations
         num_words = num_words or db_project.num_words_per_topic
         num_topics = num_topics or db_project.num_topics
+        if eta is None:
+            eta = db_project.eta
 
     passes = passes or Config.PASSES
     iterations = iterations or Config.ITERATIONS
     num_words = num_words or Config.NUM_WORDS_PER_TOPIC
+    if eta is None:
+        eta = Config.ETA
 
     # Determine which documents to use
     if crawled_documents:
@@ -341,6 +346,7 @@ async def train_lda_model(
             passes=passes,
             iterations=iterations,
             num_words=num_words,
+            eta=eta,
         )
         coherence = lda_service.calculate_coherence(preprocessed_docs)
 
@@ -391,6 +397,7 @@ async def train_lda_model(
                     num_words_per_topic=num_words,
                     passes=passes,
                     iterations=iterations,
+                    eta=eta,
                     document_count=doc_count,
                     coherence_score=coherence,
                     model_path=model_path,
@@ -405,6 +412,7 @@ async def train_lda_model(
                     num_words_per_topic=num_words,
                     passes=passes,
                     iterations=iterations,
+                    eta=eta,
                     document_count=doc_count,
                     coherence_score=coherence,
                     model_path=model_path,

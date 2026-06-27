@@ -81,6 +81,7 @@ async def create_project(
             num_words_per_topic: int = Field(default=10, ge=1, le=100)
             passes: int = Field(default=15, ge=1, le=500)
             iterations: int = Field(default=100, ge=1, le=5000)
+            eta: float | None = Field(default=None, gt=0, le=1)
 
         data = await request.json()
         project_req = ProjectCreateRequest(**data)
@@ -99,6 +100,7 @@ async def create_project(
             num_words_per_topic=project_req.num_words_per_topic,
             passes=project_req.passes,
             iterations=project_req.iterations,
+            eta=project_req.eta,
             document_count=0,
             coherence_score=0.0,
             created_by=current_user.id
@@ -237,6 +239,7 @@ async def update_lda_config(
             num_words_per_topic: int = Field(..., ge=1, le=100)
             passes: int = Field(..., ge=1, le=500)
             iterations: int = Field(..., ge=1, le=5000)
+            eta: float | None = Field(default=None, gt=0, le=1)
 
         data = await request.json()
         cfg = LdaConfigRequest(**data)
@@ -248,6 +251,7 @@ async def update_lda_config(
             num_words_per_topic=cfg.num_words_per_topic,
             passes=cfg.passes,
             iterations=cfg.iterations,
+            eta=cfg.eta,
         )
         if not project:
             return {'success': False, 'message': 'Project not found'}

@@ -35,7 +35,7 @@ class LDAService:
             'sample_bow': self.corpus[0] if self.corpus else []
         }
     
-    def train_lda(self, num_topics=None, passes=None, iterations=None, num_words=None):
+    def train_lda(self, num_topics=None, passes=None, iterations=None, num_words=None, eta=None):
         """Train LDA model"""
         if self.corpus is None or self.dictionary is None:
             raise ValueError("Dictionary and corpus must be created first")
@@ -43,6 +43,8 @@ class LDAService:
         num_topics = num_topics or self.num_topics
         passes = passes or Config.PASSES
         iterations = iterations or Config.ITERATIONS
+        if eta is None:
+            eta = Config.ETA
         if num_words is not None:
             self.num_words = num_words
 
@@ -55,6 +57,7 @@ class LDAService:
             chunksize=100,
             passes=passes,
             alpha='auto',
+            eta=eta,
             per_word_topics=True,
             iterations=iterations
         )
@@ -208,7 +211,7 @@ class LDAService:
         return topic_vector
     
     def train_on_documents(self, documents, num_topics=None, passes=None, iterations=None,
-                          num_words=None, project_name=None, save_model=True, source_urls=None):
+                          num_words=None, project_name=None, save_model=True, source_urls=None, eta=None):
         """Train LDA model on a list of document objects"""
         from services.preprocessing import TextPreprocessor
 
@@ -234,6 +237,7 @@ class LDAService:
             passes=passes,
             iterations=iterations,
             num_words=num_words,
+            eta=eta,
         )
 
         # Calculate coherence
